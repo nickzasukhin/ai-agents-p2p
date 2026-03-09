@@ -123,7 +123,7 @@ function InstancedAgents({
 
   return (
     <>
-      <instancedMesh ref={shieldRef} args={[undefined, undefined, agents.length]}>
+      <instancedMesh ref={shieldRef} args={[undefined, undefined, agents.length]} raycast={() => {}}>
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
           wireframe
@@ -135,7 +135,7 @@ function InstancedAgents({
         />
       </instancedMesh>
 
-      <instancedMesh ref={glowRef} args={[undefined, undefined, agents.length]}>
+      <instancedMesh ref={glowRef} args={[undefined, undefined, agents.length]} raycast={() => {}}>
         <sphereGeometry args={[1, 16, 16]} />
         <meshBasicMaterial vertexColors transparent opacity={0.06} />
         <instancedBufferAttribute
