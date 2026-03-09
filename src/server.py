@@ -1098,9 +1098,8 @@ def create_app(
         if assets_dir.is_dir():
             app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
 
-        @app.get("/ui/{rest_of_path:path}")
-        @app.get("/ui")
-        async def serve_spa(rest_of_path: str = ""):
+        @app.get("/")
+        async def serve_spa_root():
             return FileResponse(str(frontend_dist / "index.html"))
 
         _serving_frontend = True
