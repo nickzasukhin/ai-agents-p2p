@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+.env
+*.db
+
+# Data dirs (mounted as volumes)
+data/
+
+# Frontend dev artifacts (rebuilt in Docker)
+frontend/node_modules/
+frontend/dist/
+
+# Visualization demo (not needed in production)
+viz/
+
+# IDE / OS
+.cursor/
+.idea/
+*.swp
+.DS_Store
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage

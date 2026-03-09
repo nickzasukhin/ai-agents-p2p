@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Data (generated at runtime)
+data/
+*.db
+
+# Secrets
+.env
+.env.local
+.env.production
+!.env.example
+
+# IDE / OS
+.DS_Store
+.idea/
+.claude/
+.cursor/
+*.swp
+*.swo
+*~
+
+# 3D visualization demo (not part of core)
+viz/
