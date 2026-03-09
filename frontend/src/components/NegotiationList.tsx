@@ -52,6 +52,7 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
   const [expanded, setExpanded] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState<StateFilter>('all')
   const [confirm, setConfirm] = useState<{
@@ -79,7 +80,11 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
 
   const handleSend = async (id: string) => {
     setLoading(id)
-    try { await sendNegotiation(id); refresh() } catch {}
+    try {
+      await sendNegotiation(id)
+      setSentIds(prev => new Set(prev).add(id))
+      refresh()
+    } catch {}
     setLoading(null)
   }
 
@@ -181,10 +186,14 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
               {/* Actions */}
               <div className="neg-actions">
                 {neg.state === 'proposed' && (
-                  <button className="btn-primary" onClick={() => handleSend(neg.id)}
-                    disabled={loading === neg.id}>
-                    {loading === neg.id ? 'Sending...' : 'Send Proposal'}
-                  </button>
+                  sentIds.has(neg.id) ? (
+                    <span className="sent-badge">Proposal Delivered — waiting for response</span>
+                  ) : (
+                    <button className="btn-primary" onClick={() => handleSend(neg.id)}
+                      disabled={loading === neg.id}>
+                      {loading === neg.id ? 'Sending...' : 'Send Proposal'}
+                    </button>
+                  )
                 )}
                 {neg.state === 'owner_review' && (
                   <>
@@ -294,7 +303,15 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
           border-radius: var(--radius-sm);
           border-left: 3px solid var(--success);
         }
-        .neg-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .neg-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+        .sent-badge {
+          font-size: 12px;
+          color: var(--success);
+          padding: 4px 12px;
+          background: rgba(0,206,201,0.08);
+          border: 1px solid rgba(0,206,201,0.2);
+          border-radius: 4px;
+        }
         .neg-messages {
           margin-top: 16px;
           border-top: 1px solid var(--border);
