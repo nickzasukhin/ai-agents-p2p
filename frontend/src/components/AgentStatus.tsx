@@ -119,8 +119,16 @@ export default function AgentStatus({ wsHealth, wsConnected }: Props) {
           align-items: center;
           gap: 10px;
           margin-bottom: 16px;
+          min-width: 0;
         }
-        .status-header h2 { font-size: 18px; flex: 1; }
+        .status-header h2 {
+          font-size: 18px;
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .status-dot {
           width: 10px;
           height: 10px;

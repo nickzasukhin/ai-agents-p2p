@@ -143,12 +143,15 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           border: 1px solid var(--border);
           border-radius: var(--radius);
           padding: 20px;
+          min-width: 0;
         }
         .panel-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 16px;
+          flex-wrap: wrap;
+          gap: 8px;
         }
         .panel-header h3 { font-size: 16px; }
         .panel-actions { display: flex; gap: 8px; }
@@ -159,7 +162,7 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
         }
         .match-list {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
           gap: 10px;
         }
         .match-card {
@@ -168,6 +171,8 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           border-radius: var(--radius-sm);
           padding: 12px 14px;
           transition: border-color 0.2s;
+          min-width: 0;
+          overflow: hidden;
         }
         .match-card:hover {
           border-color: var(--accent);
@@ -208,13 +213,14 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .match-reasons { display: flex; flex-direction: column; gap: 3px; }
+        .match-reasons { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .reason {
           display: flex;
           align-items: center;
           gap: 6px;
           font-size: 11px;
           line-height: 1.3;
+          min-width: 0;
         }
         .reason-dir {
           font-size: 9px;

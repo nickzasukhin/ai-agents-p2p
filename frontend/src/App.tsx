@@ -194,20 +194,21 @@ export default function App() {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 12px;
+          gap: 8px;
         }
         .logo {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 12px;
+          gap: 8px;
         }
-        .logo-icon { font-size: 32px; }
+        .logo-icon { font-size: 28px; }
         .logo h1 {
           font-size: 28px;
           background: linear-gradient(135deg, var(--accent-light), var(--success));
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
+          white-space: nowrap;
         }
         .subtitle {
           color: var(--text-muted);
@@ -224,6 +225,7 @@ export default function App() {
           display: flex;
           flex-direction: column;
           gap: 20px;
+          min-width: 0;
         }
         .col-side {
           position: sticky;
@@ -236,6 +238,12 @@ export default function App() {
           .col-side {
             position: static;
           }
+        }
+        @media (max-width: 480px) {
+          .app { padding: 12px; }
+          .logo-icon { font-size: 22px; }
+          .logo h1 { font-size: 20px; }
+          .subtitle { font-size: 12px; }
         }
       `}</style>
     </div>
