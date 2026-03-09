@@ -56,13 +56,16 @@ function InstancedAgents({
       dummy.updateMatrix()
       shieldRef.current.setMatrixAt(i, dummy.matrix)
 
-      const cfg = STATUS_CONFIG[agent.status]
-      const c = new THREE.Color(agent.isOurAgent ? '#00ffcc' : cfg.color)
+      // Main sphere: cluster color (our agent gets special teal)
+      const c = new THREE.Color(agent.isOurAgent ? '#00ffcc' : agent.color)
+      if (agent.status === 'offline') c.multiplyScalar(0.3)
       colorArr[i * 3] = c.r
       colorArr[i * 3 + 1] = c.g
       colorArr[i * 3 + 2] = c.b
 
-      const gc = new THREE.Color(agent.color)
+      // Glow: same cluster color
+      const gc = new THREE.Color(agent.isOurAgent ? '#00ffcc' : agent.color)
+      if (agent.status === 'offline') gc.multiplyScalar(0.2)
       glowColorArr[i * 3] = gc.r
       glowColorArr[i * 3 + 1] = gc.g
       glowColorArr[i * 3 + 2] = gc.b
@@ -134,12 +137,10 @@ function InstancedAgents({
 
       <instancedMesh ref={glowRef} args={[undefined, undefined, agents.length]}>
         <sphereGeometry args={[1, 16, 16]} />
-        <meshStandardMaterial
-          transparent
-          opacity={0.04}
-          color="#88aacc"
-          emissive="#88aacc"
-          emissiveIntensity={0.3}
+        <meshBasicMaterial vertexColors transparent opacity={0.06} />
+        <instancedBufferAttribute
+          attach="geometry-attributes-color"
+          args={[glowColorArr, 3]}
         />
       </instancedMesh>
 
@@ -149,12 +150,7 @@ function InstancedAgents({
         onClick={handleClick}
       >
         <sphereGeometry args={[1, 24, 24]} />
-        <meshStandardMaterial
-          metalness={0.5}
-          roughness={0.2}
-          emissive="#88aacc"
-          emissiveIntensity={0.6}
-        />
+        <meshBasicMaterial vertexColors />
         <instancedBufferAttribute
           attach="geometry-attributes-color"
           args={[colorArr, 3]}
@@ -451,6 +447,13 @@ function Scene({
   const isSmall = agents.length < 20
   const ourAgent = agents.find(a => a.isOurAgent)
 
+  // Only show labels for clusters that have at least one non-our agent
+  const activeClusters = useMemo(() => {
+    const populated = new Set<number>()
+    agents.forEach(a => { if (!a.isOurAgent) populated.add(a.cluster) })
+    return CLUSTERS.map((c, i) => ({ ...c, index: i })).filter(c => populated.has(c.index))
+  }, [agents])
+
   return (
     <>
       <ambientLight intensity={0.12} />
@@ -463,9 +466,9 @@ function Scene({
       <fog attach="fog" args={['#030308', isSmall ? 18 : 25, isSmall ? 40 : 55]} />
       <BackgroundParticles count={isSmall ? 300 : 800} />
 
-      {CLUSTERS.slice(0, -1).map((c, i) => (
+      {activeClusters.map(c => (
         <ClusterLabel
-          key={i}
+          key={c.index}
           name={c.name}
           position={[c.center[0], c.center[1] + (isSmall ? 4 : 5.5), c.center[2]]}
           color={c.color}

@@ -1,7 +1,8 @@
 // ─── API layer for fetching real agent data ─────────────────────────────────
 
-const OUR_REGISTRY = 'https://registry.devpunks.io'
-const GLOBAL_REGISTRY = 'https://a2aregistry.org'
+const isDev = import.meta.env.DEV
+const OUR_REGISTRY = isDev ? '/proxy/registry' : 'https://registry.devpunks.io'
+const GLOBAL_REGISTRY = isDev ? '/proxy/global' : 'https://a2aregistry.org'
 const OUR_API = '/api'
 
 export type RawSkill = {

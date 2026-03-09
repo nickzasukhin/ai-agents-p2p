@@ -95,9 +95,6 @@ export function buildVizData(
   negotiations: NegotiationData[],
   health: HealthData | null,
 ): { agents: AgentNode[]; connections: Connection[] } {
-  const isSmall = rawAgents.length < 20
-  const jitter = isSmall ? 3 : 6
-
   // Build match/negotiation lookup by URL
   const matchByUrl = new Map<string, MatchData>()
   for (const m of matches) {
@@ -122,7 +119,38 @@ export function buildVizData(
     })
   }
 
+  // Inject matched/negotiated agents not in registry
+  const knownUrls = new Set(rawAgents.map(a => a.url.replace(/\/+$/, '')))
+  for (const m of matches) {
+    const url = m.agent_url.replace(/\/+$/, '')
+    if (!knownUrls.has(url)) {
+      knownUrls.add(url)
+      rawAgents.push({
+        url,
+        name: m.agent_name || 'Unknown Agent',
+        description: m.description || '',
+        skills: [],
+        status: 'online',
+      })
+    }
+  }
+  for (const n of negotiations) {
+    const url = n.their_url.replace(/\/+$/, '')
+    if (!knownUrls.has(url)) {
+      knownUrls.add(url)
+      rawAgents.push({
+        url,
+        name: n.their_name || 'Unknown Agent',
+        description: '',
+        skills: [],
+        status: 'online',
+      })
+    }
+  }
+
   // Build agent nodes
+  const isSmall = rawAgents.length < 20
+  const jitter = isSmall ? 3 : 6
   const agents: AgentNode[] = []
   const urlToId = new Map<string, number>()
 
