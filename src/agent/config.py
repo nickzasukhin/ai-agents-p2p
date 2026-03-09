@@ -81,7 +81,14 @@ class AgentConfig(BaseSettings):
     @field_validator("registry_urls", mode="before")
     @classmethod
     def parse_registry_urls(cls, v):
-        """Parse registry URLs from comma-separated string or list."""
+        """Parse registry URLs from JSON array or comma-separated string."""
         if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                import json
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    pass
             return [u.strip() for u in v.split(",") if u.strip()]
         return v

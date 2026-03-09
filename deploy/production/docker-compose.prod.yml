@@ -13,7 +13,7 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       API_TOKEN: ${API_TOKEN}
       PUBLIC_URL: https://agents.devpunks.io
-      REGISTRY_URLS: https://registry.devpunks.io
+      REGISTRY_URLS: '["https://registry.devpunks.io"]'
       A2A_REGISTRY_ENABLED: "true"
       CHAT_MODE: ${CHAT_MODE:-auto}
       LOG_LEVEL: ${LOG_LEVEL:-info}
