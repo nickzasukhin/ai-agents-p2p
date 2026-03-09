@@ -516,6 +516,35 @@ def create_app(
             "negotiations": started,
         }
 
+    @app.post("/negotiations/start-one")
+    async def start_single_negotiation(request: Request):
+        """Start negotiation with a single matched agent by URL."""
+        if not negotiation_manager or not discovery_loop:
+            return JSONResponse({"error": "Negotiation or discovery not configured"}, 400)
+
+        body = await request.json()
+        agent_url = body.get("agent_url", "").rstrip("/")
+        if not agent_url:
+            return JSONResponse({"error": "agent_url required"}, 400)
+
+        match_list = discovery_loop.get_matches()
+        match = next((m for m in match_list if m.agent_url.rstrip("/") == agent_url), None)
+        if not match:
+            return JSONResponse({"error": "Agent not found in current matches"}, 404)
+
+        try:
+            neg = await negotiation_manager.start_negotiation(match)
+            await _ws_push_negotiations()
+            await _ws_push_health()
+            return {
+                "status": "ok",
+                "negotiation_id": neg.id,
+                "peer": match.agent_name,
+                "state": neg.state.value,
+            }
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, 409)
+
     @app.post("/negotiations/{negotiation_id}/send")
     async def send_negotiation_message(negotiation_id: str):
         """Send the current negotiation proposal to the peer agent via A2A."""

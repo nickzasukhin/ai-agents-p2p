@@ -96,6 +96,13 @@ export async function startNegotiations() {
   return apiFetch('/negotiations/start', { method: 'POST' })
 }
 
+export async function startSingleNegotiation(agentUrl: string) {
+  return apiFetch('/negotiations/start-one', {
+    method: 'POST',
+    body: JSON.stringify({ agent_url: agentUrl }),
+  })
+}
+
 export async function sendNegotiation(id: string) {
   return apiFetch(`/negotiations/${id}/send`, { method: 'POST' })
 }

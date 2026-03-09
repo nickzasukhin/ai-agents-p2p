@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchMatches, runDiscovery, startNegotiations, type Match } from '../api'
+import { fetchMatches, runDiscovery, startNegotiations, startSingleNegotiation, type Match } from '../api'
 import { Skeleton } from './ErrorBoundary'
 
 type Props = {
@@ -12,6 +12,7 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [negotiating, setNegotiating] = useState<Set<string>>(new Set())
 
   // Use WS-pushed matches when available
   useEffect(() => {
@@ -47,6 +48,15 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
       onRefresh?.()
     } catch {}
     setLoading(false)
+  }
+
+  const handleNegotiateOne = async (agentUrl: string) => {
+    setNegotiating(prev => new Set(prev).add(agentUrl))
+    try {
+      await startSingleNegotiation(agentUrl)
+      onRefresh?.()
+    } catch {}
+    setNegotiating(prev => { const s = new Set(prev); s.delete(agentUrl); return s })
   }
 
   const filtered = matches.filter(m =>
@@ -112,6 +122,15 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
                     </span>
                   </div>
                 ))}
+              </div>
+              <div className="match-actions">
+                <button
+                  className="btn-negotiate"
+                  onClick={() => handleNegotiateOne(m.agent_url)}
+                  disabled={negotiating.has(m.agent_url)}
+                >
+                  {negotiating.has(m.agent_url) ? '...' : 'Negotiate'}
+                </button>
               </div>
             </div>
           ))}
@@ -217,6 +236,28 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .match-actions {
+          margin-top: 8px;
+          display: flex;
+          justify-content: flex-end;
+        }
+        .btn-negotiate {
+          background: rgba(108,92,231,0.15);
+          color: var(--accent-light);
+          border: 1px solid var(--accent);
+          padding: 4px 14px;
+          font-size: 11px;
+          border-radius: 4px;
+        }
+        .btn-negotiate:hover {
+          background: var(--accent);
+          color: white;
+        }
+        .btn-negotiate:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
         }
       `}</style>
     </div>
