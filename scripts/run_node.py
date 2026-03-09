@@ -28,6 +28,7 @@ from src.profile.builder import build_agent_card_from_context
 from src.discovery.registry import StaticRegistry
 from src.discovery.gossip import GossipProtocol
 from src.discovery.loop import DiscoveryLoop
+from src.discovery.registry_client import RegistryClient
 from src.a2a_client.client import A2AClient
 from src.matching.embeddings import EmbeddingEngine
 from src.matching.engine import MatchingEngine
@@ -96,6 +97,9 @@ def setup_discovery(
     dht_agent_info: dict | None = None,
     storage=None,
     our_tags: list[str] | None = None,
+    registry_client: RegistryClient | None = None,
+    registry_urls: list[str] | None = None,
+    a2a_registry_enabled: bool = True,
 ) -> tuple[DiscoveryLoop | None, GossipProtocol | None]:
     """Set up the discovery loop with registry, gossip, and matching engine."""
     reg_path = registry_path or str(Path(config.data_dir) / "registry.json")
@@ -145,6 +149,9 @@ def setup_discovery(
         dht_agent_info=dht_agent_info,
         storage=storage,
         our_tags=our_tags,
+        registry_client=registry_client,
+        registry_urls=registry_urls,
+        a2a_registry_enabled=a2a_registry_enabled,
     )
 
     log.info("discovery_configured", peers=len(registry), interval=discovery_interval)
@@ -255,6 +262,19 @@ def main():
         choices=["auto", "manual"],
         help="Chat mode: auto (agent chats via LLM) or manual (owner chats)"
     )
+    # Phase 10: API Security + Registry
+    parser.add_argument(
+        "--api-token", type=str, default=None,
+        help="Bearer token for owner-facing API endpoints"
+    )
+    parser.add_argument(
+        "--registry-url", type=str, nargs="*", default=None,
+        help="Registry URL(s) to register with and fetch agents from (can specify multiple)"
+    )
+    parser.add_argument(
+        "--no-a2a-registry", action="store_true",
+        help="Disable auto-registration on a2aregistry.org"
+    )
     args = parser.parse_args()
 
     config = AgentConfig()
@@ -279,6 +299,13 @@ def main():
         config.relay_mode = True
     if args.chat_mode:
         config.chat_mode = args.chat_mode
+    # Phase 10: API Security + Registry
+    if args.api_token:
+        config.api_token = args.api_token
+    if args.registry_url:
+        config.registry_urls = args.registry_url
+    if args.no_a2a_registry:
+        config.a2a_registry_enabled = False
 
     # Apply structured logging with proper level (Phase 6.6)
     configure_logging(config.log_level)
@@ -376,6 +403,16 @@ def main():
         peers_list = [p.strip() for p in config.peers.split(",") if p.strip()]
         log.info("peers_from_env", peers=peers_list)
 
+    # Setup registry client for public registries (Phase 10)
+    registry_client = None
+    if config.registry_urls or config.a2a_registry_enabled:
+        registry_client = RegistryClient(timeout=config.http_timeout)
+        log.info(
+            "registry_client_configured",
+            urls=config.registry_urls,
+            a2a_global=config.a2a_registry_enabled,
+        )
+
     # Setup discovery + gossip (with DHT reference for re-publish)
     discovery_loop, gossip = setup_discovery(
         config=config,
@@ -388,6 +425,9 @@ def main():
         dht_agent_info=dht_agent_info,
         storage=storage,
         our_tags=our_tags,
+        registry_client=registry_client,
+        registry_urls=config.registry_urls,
+        a2a_registry_enabled=config.a2a_registry_enabled,
     )
 
     # Setup negotiation
@@ -498,17 +538,34 @@ def main():
         chat_manager=chat_manager,
     )
 
+    # Phase 10: Auto-register in public registries on startup
+    if registry_client and own_url and ("localhost" not in own_url and "127.0.0.1" not in own_url):
+        async def _auto_register():
+            await asyncio.sleep(10)  # Wait for server to be ready
+            try:
+                results = await registry_client.register_all(
+                    config.registry_urls, own_url, config.a2a_registry_enabled,
+                )
+                log.info("auto_registration_complete", results=results)
+            except Exception as e:
+                log.warning("auto_registration_error", error=str(e))
+
+        # Store task ref so it's not garbage collected
+        app.state.registry_registration_task = _auto_register
+
     log.info(
         "server_starting",
         url=own_url,
         agent_card_url=f"{own_url}/.well-known/agent-card.json",
-        version="0.9.0",
+        version="1.1.0",
         discovery="enabled" if discovery_loop else "disabled",
         negotiation="enabled",
         projects="enabled",
         events="enabled",
         tunnel=tunnel_info.provider if tunnel_info else None,
         relay_mode=config.relay_mode,
+        registries=len(config.registry_urls),
+        a2a_registry=config.a2a_registry_enabled,
     )
 
     # Signal handler for graceful shutdown (Phase 6.6)

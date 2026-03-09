@@ -1,5 +1,33 @@
 const BASE = '/api'
 
+// ── Auth Token Management (Phase 10) ────────────────────────
+
+const TOKEN_KEY = 'a2a_api_token'
+
+export function getApiToken(): string {
+  return localStorage.getItem(TOKEN_KEY) || ''
+}
+
+export function setApiToken(token: string): void {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(TOKEN_KEY)
+  }
+}
+
+export function hasApiToken(): boolean {
+  return !!localStorage.getItem(TOKEN_KEY)
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getApiToken()
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` }
+  }
+  return {}
+}
+
 // ── Error handling ──────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -17,7 +45,11 @@ async function apiFetch<T = any>(
   url: string,
   opts?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${url}`, opts)
+  const headers = {
+    ...authHeaders(),
+    ...(opts?.headers || {}),
+  }
+  const res = await fetch(`${BASE}${url}`, { ...opts, headers })
   if (!res.ok) {
     let body: any = null
     try { body = await res.json() } catch {}

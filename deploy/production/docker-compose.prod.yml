@@ -1,0 +1,55 @@
+services:
+  agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: a2a-agent
+    environment:
+      AGENT_NAME: ${AGENT_NAME:-Agent-DevPunks}
+      PORT: "9000"
+      DATA_DIR: /data
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      API_TOKEN: ${API_TOKEN}
+      PUBLIC_URL: https://agents.devpunks.io
+      REGISTRY_URLS: https://registry.devpunks.io
+      A2A_REGISTRY_ENABLED: "true"
+      CHAT_MODE: ${CHAT_MODE:-auto}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PEERS: ""
+    ports:
+      - "9100:9000"
+      - "10000:10000/udp"
+    volumes:
+      - agent-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  registry:
+    build:
+      context: ../../registry
+      dockerfile: Dockerfile
+    container_name: a2a-registry
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+    ports:
+      - "8080:8080"
+    volumes:
+      - registry-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  agent-data:
+  registry-data:

@@ -30,6 +30,25 @@ from src.discovery.registry import StaticRegistry
 
 log = structlog.get_logger()
 
+# Private/localhost URL patterns to filter in cross-network mode (Phase 10)
+_PRIVATE_PATTERNS = [
+    "localhost", "127.0.0.1", "0.0.0.0",
+    "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+    "172.20.", "172.21.", "172.22.", "172.23.",
+    "172.24.", "172.25.", "172.26.", "172.27.",
+    "172.28.", "172.29.", "172.30.", "172.31.",
+    "192.168.",
+]
+
+
+def _is_private_url(url: str) -> bool:
+    """Check if a URL points to a private/localhost address."""
+    url_lower = url.lower()
+    for pattern in _PRIVATE_PATTERNS:
+        if pattern in url_lower:
+            return True
+    return False
+
 
 @dataclass
 class GossipStats:
@@ -134,9 +153,9 @@ class GossipProtocol:
             # Skip self
             if url == self.own_url:
                 continue
-            # Skip localhost peers when operating cross-network
-            if self.skip_localhost and ("localhost" in url or "127.0.0.1" in url):
-                log.debug("gossip_skip_localhost_peer", url=url)
+            # Skip private/localhost peers when operating cross-network (Phase 10)
+            if self.skip_localhost and _is_private_url(url):
+                log.debug("gossip_skip_private_peer", url=url)
                 continue
             # Check if already known
             known_urls = {u.rstrip("/") for u in self.registry.get_all_urls()}
@@ -209,6 +228,8 @@ class GossipProtocol:
     async def run_round(self) -> list[str]:
         """Run a single gossip round — exchange with all known peers.
 
+        Uses a semaphore to limit concurrent outbound requests (Phase 10).
+
         Returns:
             List of all newly discovered peer URLs.
         """
@@ -216,9 +237,16 @@ class GossipProtocol:
         if not all_urls:
             return []
 
-        # Exchange with each peer concurrently
+        # Concurrency limit to avoid overwhelming network (Phase 10)
+        sem = asyncio.Semaphore(10)
+
+        async def _limited_exchange(url: str) -> list[str]:
+            async with sem:
+                return await self.exchange_with_peer(url)
+
+        # Exchange with each peer concurrently (with semaphore)
         tasks = [
-            self.exchange_with_peer(url)
+            _limited_exchange(url)
             for url in all_urls
             if url.rstrip("/") != self.own_url
         ]

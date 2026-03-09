@@ -47,8 +47,17 @@ ENV PORT=9000 \
     AGENT_NAME=Agent \
     OPENAI_API_KEY="" \
     LLM_PROVIDER=openai \
-    PEERS=""
+    PEERS="" \
+    API_TOKEN="" \
+    PUBLIC_URL="" \
+    REGISTRY_URLS="" \
+    A2A_REGISTRY_ENABLED=true \
+    CHAT_MODE=auto
 
 EXPOSE 9000
+EXPOSE 10000/udp
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:9000/health || exit 1
 
 ENTRYPOINT ["python", "scripts/run_node.py"]

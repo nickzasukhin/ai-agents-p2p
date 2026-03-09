@@ -52,11 +52,23 @@ class DHTNode:
     async def start(self, bootstrap_nodes: list[tuple[str, int]] | None = None) -> None:
         """Start the DHT node and optionally bootstrap to existing nodes.
 
+        Gracefully falls back if UDP port bind fails (Phase 10 — firewall-friendly).
+
         Args:
             bootstrap_nodes: List of (host, port) tuples for bootstrapping.
         """
         self._server = Server()
-        await self._server.listen(self.udp_port)
+        try:
+            await self._server.listen(self.udp_port)
+        except OSError as e:
+            log.warning(
+                "dht_udp_bind_failed",
+                port=self.udp_port,
+                error=str(e),
+                msg="DHT disabled — continuing without it. This is normal if UDP is blocked by firewall.",
+            )
+            self._server = None
+            return
         self._is_running = True
 
         if bootstrap_nodes:
