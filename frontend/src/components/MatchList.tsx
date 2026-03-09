@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
-import { fetchMatches, runDiscovery, startNegotiations, startSingleNegotiation, type Match } from '../api'
+import { fetchMatches, fetchNegotiations as fetchNegs, runDiscovery, startNegotiations, startSingleNegotiation, type Match, type Negotiation } from '../api'
 import { Skeleton } from './ErrorBoundary'
 
 type Props = {
   onRefresh?: () => void
   wsMatches?: Match[] | null
+  wsNegotiations?: Negotiation[] | null
 }
 
-export default function MatchList({ onRefresh, wsMatches }: Props) {
+export default function MatchList({ onRefresh, wsMatches, wsNegotiations }: Props) {
   const [matches, setMatches] = useState<Match[]>([])
+  const [negotiations, setNegotiations] = useState<Negotiation[]>([])
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [negotiating, setNegotiating] = useState<Set<string>>(new Set())
+  const [sent, setSent] = useState<Set<string>>(new Set())
 
-  // Use WS-pushed matches when available
+  // Use WS-pushed data when available
   useEffect(() => {
     if (wsMatches) {
       setMatches(wsMatches)
@@ -22,11 +25,18 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
     }
   }, [wsMatches])
 
+  useEffect(() => {
+    if (wsNegotiations) setNegotiations(wsNegotiations)
+  }, [wsNegotiations])
+
   const refresh = () => {
     fetchMatches()
       .then(d => setMatches(d.matches || []))
       .catch(() => {})
       .finally(() => setInitialLoading(false))
+    fetchNegs()
+      .then(d => setNegotiations(d.negotiations || []))
+      .catch(() => {})
   }
 
   useEffect(() => { refresh() }, [])
@@ -54,9 +64,20 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
     setNegotiating(prev => new Set(prev).add(agentUrl))
     try {
       await startSingleNegotiation(agentUrl)
+      setSent(prev => new Set(prev).add(agentUrl))
+      // Refresh negotiations to get new state
+      fetchNegs()
+        .then(d => setNegotiations(d.negotiations || []))
+        .catch(() => {})
       onRefresh?.()
     } catch {}
     setNegotiating(prev => { const s = new Set(prev); s.delete(agentUrl); return s })
+  }
+
+  // Build negotiation lookup by their_url
+  const negByUrl = new Map<string, Negotiation>()
+  for (const n of negotiations) {
+    negByUrl.set(n.their_url.replace(/\/+$/, ''), n)
   }
 
   const filtered = matches.filter(m =>
@@ -124,13 +145,43 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
                 ))}
               </div>
               <div className="match-actions">
-                <button
-                  className="btn-negotiate"
-                  onClick={() => handleNegotiateOne(m.agent_url)}
-                  disabled={negotiating.has(m.agent_url)}
-                >
-                  {negotiating.has(m.agent_url) ? '...' : 'Negotiate'}
-                </button>
+                {(() => {
+                  const neg = negByUrl.get(m.agent_url.replace(/\/+$/, ''))
+                  if (neg) {
+                    const stateLabel: Record<string, string> = {
+                      init: 'Initiating',
+                      proposed: 'Proposal Sent',
+                      counter: 'Counter-proposal',
+                      evaluating: 'Evaluating',
+                      accepted: 'Accepted',
+                      owner_review: 'Needs Review',
+                      confirmed: 'Confirmed',
+                      rejected: 'Rejected',
+                      timeout: 'Timed Out',
+                      declined: 'Declined',
+                    }
+                    const label = stateLabel[neg.state] || neg.state
+                    const isActive = !neg.is_terminal
+                    return (
+                      <span className={`neg-status ${isActive ? 'neg-active' : neg.state === 'confirmed' ? 'neg-confirmed' : 'neg-terminal'}`}>
+                        {label}
+                        {isActive && <span className="neg-dot" />}
+                      </span>
+                    )
+                  }
+                  if (sent.has(m.agent_url)) {
+                    return <span className="neg-status neg-active">Sending...<span className="neg-dot" /></span>
+                  }
+                  return (
+                    <button
+                      className="btn-negotiate"
+                      onClick={() => handleNegotiateOne(m.agent_url)}
+                      disabled={negotiating.has(m.agent_url)}
+                    >
+                      {negotiating.has(m.agent_url) ? '...' : 'Negotiate'}
+                    </button>
+                  )
+                })()}
               </div>
             </div>
           ))}
@@ -264,6 +315,41 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           opacity: 0.5;
           cursor: not-allowed;
           transform: none;
+        }
+        .neg-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 4px 12px;
+          border-radius: 4px;
+        }
+        .neg-active {
+          background: rgba(108,92,231,0.15);
+          color: var(--accent-light);
+          border: 1px solid var(--accent);
+        }
+        .neg-confirmed {
+          background: rgba(0,200,83,0.15);
+          color: var(--success);
+          border: 1px solid var(--success);
+        }
+        .neg-terminal {
+          background: rgba(255,255,255,0.05);
+          color: var(--text-muted);
+          border: 1px solid var(--border);
+        }
+        .neg-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+          animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
         }
       `}</style>
     </div>

@@ -169,6 +169,7 @@ export default function App() {
             <MatchList
               onRefresh={triggerRefresh}
               wsMatches={wsMatches}
+              wsNegotiations={wsNegotiations}
             />
           )}
 
