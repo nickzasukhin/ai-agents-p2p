@@ -112,8 +112,9 @@ def setup_discovery(
             if peer_clean != own_url.rstrip("/"):
                 registry.add(peer_clean)
 
-    if len(registry) == 0:
-        log.info("no_peers_configured", msg="Discovery passive")
+    has_registries = bool(registry_urls) or a2a_registry_enabled
+    if len(registry) == 0 and not has_registries:
+        log.info("no_peers_configured", msg="Discovery passive — no peers or registries")
         return None, None
 
     registry.save()
