@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   fetchNegotiations,
-  sendNegotiation,
   approveNegotiation,
   rejectNegotiation,
   type Negotiation,
@@ -52,7 +51,6 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
   const [expanded, setExpanded] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState<StateFilter>('all')
   const [confirm, setConfirm] = useState<{
@@ -77,16 +75,6 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
   }
 
   useEffect(() => { refresh() }, [refreshTrigger])
-
-  const handleSend = async (id: string) => {
-    setLoading(id)
-    try {
-      await sendNegotiation(id)
-      setSentIds(prev => new Set(prev).add(id))
-      refresh()
-    } catch {}
-    setLoading(null)
-  }
 
   const handleApprove = async (id: string) => {
     setLoading(id)
@@ -186,14 +174,7 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpen
               {/* Actions */}
               <div className="neg-actions">
                 {neg.state === 'proposed' && (
-                  sentIds.has(neg.id) ? (
-                    <span className="sent-badge">Proposal Delivered — waiting for response</span>
-                  ) : (
-                    <button className="btn-primary" onClick={() => handleSend(neg.id)}
-                      disabled={loading === neg.id}>
-                      {loading === neg.id ? 'Sending...' : 'Send Proposal'}
-                    </button>
-                  )
+                  <span className="sent-badge">Proposal Sent — waiting for response</span>
                 )}
                 {neg.state === 'owner_review' && (
                   <>

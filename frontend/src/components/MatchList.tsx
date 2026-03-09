@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchMatches, fetchNegotiations as fetchNegs, runDiscovery, startNegotiations, startSingleNegotiation, type Match, type Negotiation } from '../api'
+import { fetchMatches, fetchNegotiations as fetchNegs, runDiscovery, startNegotiations, startSingleNegotiation, sendNegotiation, type Match, type Negotiation } from '../api'
 import { Skeleton } from './ErrorBoundary'
 
 type Props = {
@@ -63,7 +63,11 @@ export default function MatchList({ onRefresh, wsMatches, wsNegotiations }: Prop
   const handleNegotiateOne = async (agentUrl: string) => {
     setNegotiating(prev => new Set(prev).add(agentUrl))
     try {
-      await startSingleNegotiation(agentUrl)
+      const result = await startSingleNegotiation(agentUrl)
+      // Auto-send proposal immediately (no intermediate "Send Proposal" step)
+      if (result.negotiation_id) {
+        try { await sendNegotiation(result.negotiation_id) } catch {}
+      }
       setSent(prev => new Set(prev).add(agentUrl))
       // Refresh negotiations to get new state
       fetchNegs()
