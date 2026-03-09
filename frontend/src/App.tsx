@@ -41,6 +41,7 @@ export default function App() {
   const [wsChats, setWsChats] = useState<ChatChannel[] | null>(null)
   const [chatNegId, setChatNegId] = useState<string | null>(null)
   const [unreadChats, setUnreadChats] = useState(0)
+  const [eventDrawerOpen, setEventDrawerOpen] = useState(false)
   const wsRef = useRef<{ close: () => void; send: (msg: any) => void } | null>(null)
 
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1)
@@ -111,7 +112,18 @@ export default function App() {
             <span className="logo-icon">&#x1F310;</span>
             <h1>Agent Social Network</h1>
           </div>
-          <TokenDialog />
+          <div className="header-actions">
+            <a href="/viz/" target="_blank" rel="noopener" className="btn-header">3D</a>
+            <button
+              className={`btn-header btn-events ${eventDrawerOpen ? 'active' : ''}`}
+              onClick={() => setEventDrawerOpen(prev => !prev)}
+            >
+              Events
+              {wsEvents.length > 0 && <span className="events-badge">{wsEvents.length}</span>}
+              {wsEvents.length > 0 && <span className="live-dot-header" />}
+            </button>
+            <TokenDialog />
+          </div>
         </div>
         <p className="subtitle">P2P AI Agent Discovery & Collaboration</p>
       </header>
@@ -138,47 +150,51 @@ export default function App() {
 
       <ErrorBoundary>
         <main className="dashboard">
-          <div className="col-main">
-            {activeTab === 'dashboard' && (
-              <>
-                <AgentStatus wsHealth={health} wsConnected={wsConnected} />
-                <NegotiationList
-                  refreshTrigger={refreshTrigger}
-                  wsNegotiations={wsNegotiations}
-                  onOpenChat={openChat}
-                />
-              </>
-            )}
-
-            {activeTab === 'network' && (
-              <NetworkPanel />
-            )}
-
-            {activeTab === 'matches' && (
-              <MatchList
-                onRefresh={triggerRefresh}
-                wsMatches={wsMatches}
+          {activeTab === 'dashboard' && (
+            <>
+              <AgentStatus wsHealth={health} wsConnected={wsConnected} />
+              <NegotiationList
+                refreshTrigger={refreshTrigger}
+                wsNegotiations={wsNegotiations}
+                onOpenChat={openChat}
               />
-            )}
+            </>
+          )}
 
-            {activeTab === 'projects' && (
-              <ProjectList refreshTrigger={refreshTrigger} />
-            )}
+          {activeTab === 'network' && (
+            <NetworkPanel />
+          )}
 
-            {activeTab === 'chat' && (
-              <ChatPanel wsChats={wsChats} initialChatId={chatNegId} />
-            )}
+          {activeTab === 'matches' && (
+            <MatchList
+              onRefresh={triggerRefresh}
+              wsMatches={wsMatches}
+            />
+          )}
 
-            {activeTab === 'profile' && (
-              <ProfileEditor />
-            )}
-          </div>
+          {activeTab === 'projects' && (
+            <ProjectList refreshTrigger={refreshTrigger} />
+          )}
 
-          <div className="col-side">
-            <EventFeed wsEvents={wsEvents} wsConnected={wsConnected} />
-          </div>
+          {activeTab === 'chat' && (
+            <ChatPanel wsChats={wsChats} initialChatId={chatNegId} />
+          )}
+
+          {activeTab === 'profile' && (
+            <ProfileEditor />
+          )}
         </main>
       </ErrorBoundary>
+
+      {/* Event Drawer */}
+      {eventDrawerOpen && <div className="drawer-overlay" onClick={() => setEventDrawerOpen(false)} />}
+      <div className={`event-drawer ${eventDrawerOpen ? 'open' : ''}`}>
+        <div className="drawer-header">
+          <h3>Events</h3>
+          <button className="btn-outline btn-close-drawer" onClick={() => setEventDrawerOpen(false)}>Close</button>
+        </div>
+        <EventFeed wsEvents={wsEvents} wsConnected={wsConnected} />
+      </div>
 
       <style>{`
         .app {
@@ -210,40 +226,117 @@ export default function App() {
           -webkit-text-fill-color: transparent;
           white-space: nowrap;
         }
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .btn-header {
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          color: var(--text-secondary);
+          padding: 5px 12px;
+          border-radius: var(--radius-sm);
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .btn-header:hover {
+          border-color: var(--accent);
+          color: var(--accent-light);
+          transform: none;
+        }
+        .btn-events.active {
+          background: var(--accent);
+          border-color: var(--accent);
+          color: white;
+        }
+        .events-badge {
+          background: rgba(255,255,255,0.2);
+          padding: 0 5px;
+          border-radius: 8px;
+          font-size: 10px;
+          min-width: 16px;
+          text-align: center;
+        }
+        .btn-events:not(.active) .events-badge {
+          background: var(--accent);
+          color: white;
+        }
+        .live-dot-header {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--success);
+          animation: pulse 1.5s infinite;
+        }
         .subtitle {
           color: var(--text-muted);
           font-size: 14px;
           margin-top: 4px;
         }
         .dashboard {
-          display: grid;
-          grid-template-columns: 1fr 340px;
-          gap: 20px;
-          align-items: start;
-        }
-        .col-main {
           display: flex;
           flex-direction: column;
           gap: 20px;
-          min-width: 0;
         }
-        .col-side {
-          position: sticky;
-          top: 24px;
+        /* Event Drawer */
+        .drawer-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.5);
+          z-index: 99;
+          animation: fadeIn 0.15s ease-out;
         }
-        @media (max-width: 900px) {
-          .dashboard {
-            grid-template-columns: 1fr;
-          }
-          .col-side {
-            position: static;
-          }
+        .event-drawer {
+          position: fixed;
+          top: 0;
+          right: -400px;
+          width: 380px;
+          height: 100vh;
+          background: var(--bg-primary);
+          border-left: 1px solid var(--border);
+          z-index: 100;
+          transition: right 0.3s ease;
+          display: flex;
+          flex-direction: column;
+          padding: 16px;
+          overflow: hidden;
         }
+        .event-drawer.open { right: 0; }
+        .drawer-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+          flex-shrink: 0;
+        }
+        .drawer-header h3 { font-size: 16px; }
+        .btn-close-drawer {
+          padding: 4px 12px;
+          font-size: 11px;
+        }
+        .event-drawer .event-panel {
+          flex: 1;
+          overflow: hidden;
+          border: none;
+          padding: 0;
+          background: transparent;
+        }
+        .event-drawer .event-panel > .panel-header { display: none; }
         @media (max-width: 480px) {
           .app { padding: 12px; }
           .logo-icon { font-size: 22px; }
           .logo h1 { font-size: 20px; }
           .subtitle { font-size: 12px; }
+          .event-drawer { width: 100%; right: -100%; }
+          .header-actions { gap: 4px; }
+          .btn-header { padding: 4px 8px; font-size: 11px; }
         }
       `}</style>
     </div>

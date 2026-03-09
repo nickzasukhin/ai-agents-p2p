@@ -1,10 +1,19 @@
-# ── Stage 1: Build frontend ──────────────────────────────────
+# ── Stage 1a: Build frontend ─────────────────────────────────
 FROM node:20-alpine AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --ignore-scripts
 COPY frontend/ ./
+RUN npm run build
+
+# ── Stage 1b: Build 3D visualization ────────────────────────
+FROM node:20-alpine AS viz-build
+
+WORKDIR /app/viz
+COPY viz/package.json viz/package-lock.json* ./
+RUN npm ci --ignore-scripts
+COPY viz/ ./
 RUN npm run build
 
 # ── Stage 2: Python runtime ─────────────────────────────────
@@ -34,8 +43,9 @@ COPY scripts/ scripts/
 # Pre-download sentence-transformers model into image
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Copy built frontend
+# Copy built frontend + viz
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
+COPY --from=viz-build /app/viz/dist /app/viz/dist
 
 # Default data directory (mount a volume here for persistence)
 RUN mkdir -p /data/context

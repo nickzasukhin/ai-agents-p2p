@@ -163,7 +163,6 @@ export default function EventFeed({ wsEvents, wsConnected }: Props) {
         .event-feed {
           flex: 1;
           overflow-y: auto;
-          max-height: 400px;
           display: flex;
           flex-direction: column;
           gap: 6px;

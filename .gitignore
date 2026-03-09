@@ -33,5 +33,6 @@ data/
 *.swo
 *~
 
-# 3D visualization demo (not part of core)
-viz/
+# 3D visualization build output
+viz/dist/
+viz/node_modules/

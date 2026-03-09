@@ -1134,6 +1134,20 @@ def create_app(
         _serving_frontend = True
         log.info("frontend_static_serving_enabled", path=str(frontend_dist))
 
+    # ── Optional 3D visualization static serving ──────────────────
+    viz_dist = Path(__file__).parent.parent / "viz" / "dist"
+    if viz_dist.is_dir() and (viz_dist / "index.html").exists():
+        viz_assets = viz_dist / "assets"
+        if viz_assets.is_dir():
+            app.mount("/viz/assets", StaticFiles(directory=str(viz_assets)), name="viz-assets")
+
+        @app.get("/viz")
+        @app.get("/viz/{rest_of_path:path}")
+        async def serve_viz(rest_of_path: str = ""):
+            return FileResponse(str(viz_dist / "index.html"))
+
+        log.info("viz_static_serving_enabled", path=str(viz_dist))
+
     # ── Mount A2A Starlette app ───────────────────────────────────
     a2a_app = build_a2a_app(
         agent_card,
