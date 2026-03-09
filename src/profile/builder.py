@@ -85,6 +85,8 @@ def build_agent_card_from_context(
             description=s.get("description", ""),
             tags=s.get("tags", []),
             examples=[],
+            inputModes=["text"],
+            outputModes=["text"],
         ))
 
     card = AgentCard(
@@ -94,7 +96,11 @@ def build_agent_card_from_context(
         version="0.1.0",
         defaultInputModes=["text"],
         defaultOutputModes=["text"],
-        capabilities=AgentCapabilities(),
+        capabilities=AgentCapabilities(
+            streaming=False,
+            push_notifications=False,
+            state_transition_history=False,
+        ),
         skills=skills,
         security=[],
         provider=AgentProvider(organization="DevPunks", url=agent_url),
@@ -117,6 +123,8 @@ def _build_card_without_llm(
             description=cap.description[:100],
             tags=[cap.category],
             examples=[],
+            inputModes=["text"],
+            outputModes=["text"],
         )
         for i, cap in enumerate(context.capabilities)
     ]
@@ -128,7 +136,11 @@ def _build_card_without_llm(
         version="0.1.0",
         defaultInputModes=["text"],
         defaultOutputModes=["text"],
-        capabilities=AgentCapabilities(),
+        capabilities=AgentCapabilities(
+            streaming=False,
+            push_notifications=False,
+            state_transition_history=False,
+        ),
         skills=skills,
         security=[],
         provider=AgentProvider(organization="DevPunks", url=agent_url),
