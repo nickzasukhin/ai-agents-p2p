@@ -57,9 +57,11 @@ class RegistryClient:
         {"wellKnownURI": "https://agents.example.com"}
         """
         url = f"{A2A_REGISTRY_URL}/api/agents/register"
+        # a2aregistry.org requires full path to agent card
+        well_known = our_url.rstrip("/") + "/.well-known/agent-card.json"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(url, json={"wellKnownURI": our_url})
+                resp = await client.post(url, json={"wellKnownURI": well_known})
                 if resp.status_code in (200, 201):
                     log.info("a2a_global_registered", url=our_url)
                     return True

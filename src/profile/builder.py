@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import structlog
 
-from a2a.types import AgentCard, AgentSkill, AgentCapabilities
+from a2a.types import AgentCard, AgentSkill, AgentCapabilities, AgentProvider
 from src.profile.mcp_reader import OwnerContext
 from src.llm.provider import LLMProvider, ChatMessage
 
@@ -97,6 +97,7 @@ def build_agent_card_from_context(
         capabilities=AgentCapabilities(),
         skills=skills,
         security=[],
+        provider=AgentProvider(organization="DevPunks", url=agent_url),
     )
 
     log.info("agent_card_built", name=card.name, skills=len(skills))
@@ -130,4 +131,5 @@ def _build_card_without_llm(
         capabilities=AgentCapabilities(),
         skills=skills,
         security=[],
+        provider=AgentProvider(organization="DevPunks", url=agent_url),
     )
