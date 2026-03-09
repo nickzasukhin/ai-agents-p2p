@@ -11,6 +11,7 @@ import { ConfirmDialog, Skeleton, timeAgo } from './ErrorBoundary'
 type Props = {
   refreshTrigger?: number
   wsNegotiations?: Negotiation[] | null
+  onOpenChat?: (negId: string) => void
 }
 
 const stateColors: Record<string, string> = {
@@ -46,7 +47,7 @@ const STATE_GROUPS: Record<StateFilter, string[]> = {
   completed: ['confirmed', 'rejected', 'declined', 'timeout'],
 }
 
-export default function NegotiationList({ refreshTrigger, wsNegotiations }: Props) {
+export default function NegotiationList({ refreshTrigger, wsNegotiations, onOpenChat }: Props) {
   const [negotiations, setNegotiations] = useState<Negotiation[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
@@ -198,6 +199,11 @@ export default function NegotiationList({ refreshTrigger, wsNegotiations }: Prop
                       Decline
                     </button>
                   </>
+                )}
+                {neg.state === 'confirmed' && onOpenChat && (
+                  <button className="btn-outline" onClick={() => onOpenChat(neg.id)}>
+                    View Chat
+                  </button>
                 )}
               </div>
 

@@ -51,6 +51,11 @@ class EventType(str, Enum):
     PROJECT_COMPLETED = "project_completed"
     PROJECT_SUGGESTION = "project_suggestion"
 
+    # Chat events (Phase 9)
+    CHAT_STARTED = "chat_started"
+    CHAT_MESSAGE_SENT = "chat_message_sent"
+    CHAT_MESSAGE_RECEIVED = "chat_message_received"
+
     # System events
     SYSTEM_ERROR = "system_error"
     DISCOVERY_CYCLE = "discovery_cycle"

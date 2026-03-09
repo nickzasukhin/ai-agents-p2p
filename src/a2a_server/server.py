@@ -19,18 +19,20 @@ def build_a2a_app(
     agent_card: AgentCard,
     negotiation_manager: NegotiationManager | None = None,
     privacy_guard: PrivacyGuard | None = None,
+    chat_manager=None,
 ) -> Starlette:
     """Build a Starlette app that serves the A2A protocol.
 
     This includes:
     - /.well-known/agent-card.json — the agent's public profile
-    - /message/send — A2A message endpoint (handles negotiations)
+    - /message/send — A2A message endpoint (handles negotiations + chat)
     - /task/* — A2A task management endpoints
     """
     executor = SocialAgentExecutor(
         agent_name=agent_card.name,
         negotiation_manager=negotiation_manager,
         privacy_guard=privacy_guard,
+        chat_manager=chat_manager,
     )
 
     request_handler = DefaultRequestHandler(

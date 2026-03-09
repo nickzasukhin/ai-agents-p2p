@@ -42,6 +42,7 @@ from src.network.address import resolve_public_url
 from src.network.tunnel import start_tunnel, stop_tunnel
 from src.negotiation.project_manager import ProjectManager
 from src.llm.factory import LLMFactory
+from src.chat.manager import ChatManager
 from src.server import create_app
 
 # Default logging (reconfigured after config is loaded)
@@ -249,6 +250,11 @@ def main():
         "--relay-mode", action="store_true",
         help="Enable relay endpoints on this node"
     )
+    parser.add_argument(
+        "--chat-mode", type=str, default=None,
+        choices=["auto", "manual"],
+        help="Chat mode: auto (agent chats via LLM) or manual (owner chats)"
+    )
     args = parser.parse_args()
 
     config = AgentConfig()
@@ -271,6 +277,8 @@ def main():
         config.relay_url = args.relay_url
     if args.relay_mode:
         config.relay_mode = True
+    if args.chat_mode:
+        config.chat_mode = args.chat_mode
 
     # Apply structured logging with proper level (Phase 6.6)
     configure_logging(config.log_level)
@@ -453,6 +461,21 @@ def main():
             "our_did": did_manager.did,
         }
 
+    # Setup chat manager (Phase 9)
+    chat_manager = None
+    if llm:
+        chat_manager = ChatManager(
+            llm=llm,
+            event_bus=event_bus,
+            privacy_guard=privacy_guard,
+            storage=storage,
+            our_url=own_url,
+            our_name=card.name,
+            chat_mode=config.chat_mode,
+            max_rounds=config.chat_max_rounds,
+        )
+        log.info("chat_manager_configured", mode=config.chat_mode, max_rounds=config.chat_max_rounds)
+
     # Create and run app
     app = create_app(
         card,
@@ -472,6 +495,7 @@ def main():
         tunnel_info=tunnel_info,
         own_url=own_url,
         config=config,
+        chat_manager=chat_manager,
     )
 
     log.info(

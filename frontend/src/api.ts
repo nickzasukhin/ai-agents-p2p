@@ -177,6 +177,7 @@ export type WSHandlers = {
   onMatchesUpdate?: (matches: Match[]) => void
   onNegotiationsUpdate?: (negotiations: Negotiation[]) => void
   onHealthUpdate?: (health: any) => void
+  onChatUpdate?: (chats: ChatChannel[]) => void
   onConnectionChange?: (connected: boolean) => void
 }
 
@@ -202,6 +203,7 @@ export function connectWebSocket(handlers: WSHandlers): {
       if (msg.channel === 'matches') handlers.onMatchesUpdate?.(msg.data)
       else if (msg.channel === 'negotiations') handlers.onNegotiationsUpdate?.(msg.data)
       else if (msg.channel === 'health') handlers.onHealthUpdate?.(msg.data)
+      else if (msg.channel === 'chat') handlers.onChatUpdate?.(msg.data)
     } else if (msg.type === 'batch') {
       for (const m of msg.messages || []) processMessage(m)
     } else if (msg.type === 'ping') {
@@ -223,7 +225,7 @@ export function connectWebSocket(handlers: WSHandlers): {
       reconnectAttempts = 0
       handlers.onConnectionChange?.(true)
       ws!.send(JSON.stringify({
-        subscribe: ['events', 'matches', 'negotiations', 'health'],
+        subscribe: ['events', 'matches', 'negotiations', 'health', 'chat'],
       }))
     }
 
@@ -420,4 +422,45 @@ export async function syncProject(id: string) {
 
 export async function completeProject(id: string) {
   return apiFetch(`/projects/${id}/complete`, { method: 'POST' })
+}
+
+// ── Chat (Phase 9) ──────────────────────────────────────────
+
+export type ChatMessage = {
+  id: string
+  negotiation_id: string
+  sender_url: string
+  sender_name: string
+  message: string
+  message_type: 'agent' | 'owner'
+  timestamp: string
+}
+
+export type ChatChannel = {
+  negotiation_id: string
+  their_name: string
+  their_url: string
+  message_count: number
+  last_message: ChatMessage | null
+  collaboration_summary: string
+}
+
+export async function fetchChats() {
+  return apiFetch<{ chats: ChatChannel[]; chat_mode: string }>('/chats')
+}
+
+export async function fetchChatMessages(negotiationId: string) {
+  return apiFetch<{ messages: ChatMessage[]; count: number }>(`/chats/${negotiationId}/messages`)
+}
+
+export async function sendOwnerMessage(negotiationId: string, message: string) {
+  return apiFetch(`/chats/${negotiationId}/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+}
+
+export async function startChat(negotiationId: string) {
+  return apiFetch(`/chats/${negotiationId}/start`, { method: 'POST' })
 }

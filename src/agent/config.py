@@ -23,6 +23,10 @@ class AgentConfig(BaseSettings):
     relay_url: str = ""           # URL of a relay node to register with
     relay_mode: bool = False      # Enable relay endpoints on this node
 
+    # --- Chat (Phase 9) ---
+    chat_mode: str = "auto"  # "auto" = agent chats via LLM; "manual" = owner chats manually
+    chat_max_rounds: int = 10  # Max auto-reply rounds per chat
+
     # --- Production Hardening (Phase 6.6) ---
     cors_origins: list[str] = ["*"]        # Allowed CORS origins
     http_timeout: float = 10.0             # Default httpx client timeout (seconds)
