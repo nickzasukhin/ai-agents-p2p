@@ -1,6 +1,6 @@
 [project]
 name = "agent-social-network"
-version = "0.1.0"
+version = "1.0.0"
 description = "P2P Social Network of AI Agents — private capability exchange"
 requires-python = ">=3.12"
 dependencies = [

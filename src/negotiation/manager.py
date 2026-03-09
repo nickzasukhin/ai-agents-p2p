@@ -83,12 +83,15 @@ class NegotiationManager:
 
     async def start_negotiation(self, match: AgentMatch) -> Negotiation:
         """Start a new negotiation from a match result."""
-        # Check if already negotiating with this peer
+        # Check if already negotiating or collaborated with this peer
         if match.agent_url in self._by_peer:
             existing_id = self._by_peer[match.agent_url]
             existing = self._negotiations.get(existing_id)
             if existing and not existing.is_terminal:
                 log.info("negotiation_already_active", peer=match.agent_url, id=existing_id)
+                return existing
+            if existing and existing.state == NegotiationState.CONFIRMED:
+                log.info("peer_already_confirmed", peer=match.agent_url, id=existing_id)
                 return existing
 
         # Check concurrency limit
@@ -157,7 +160,13 @@ class NegotiationManager:
         if negotiation_id and negotiation_id in self._negotiations:
             neg = self._negotiations[negotiation_id]
         elif sender_url in self._by_peer:
-            neg = self._negotiations.get(self._by_peer[sender_url])
+            candidate = self._negotiations.get(self._by_peer[sender_url])
+            # If the existing negotiation is terminal and the incoming ID is new,
+            # allow creating a fresh negotiation (re-negotiation after confirmed/rejected)
+            if candidate and candidate.is_terminal and negotiation_id and negotiation_id not in self._negotiations:
+                neg = None  # Fall through to create new
+            else:
+                neg = candidate
 
         if neg is None:
             # New negotiation initiated by the other agent

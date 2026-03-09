@@ -16,7 +16,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 log = structlog.get_logger()
 
-CHANNELS = ("events", "matches", "negotiations", "health")
+CHANNELS = ("events", "matches", "negotiations", "health", "chat")
 BATCH_INTERVAL_S = 0.2
 HEARTBEAT_INTERVAL_S = 30
 

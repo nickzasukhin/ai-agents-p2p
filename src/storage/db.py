@@ -9,7 +9,7 @@ from pathlib import Path
 
 log = structlog.get_logger()
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class StorageError(Exception):
@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT,
     updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    negotiation_id TEXT NOT NULL,
+    sender_url TEXT NOT NULL,
+    sender_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'agent',
+    timestamp TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_neg ON chat_messages(negotiation_id, timestamp);
 """
 
 
@@ -451,3 +463,52 @@ class Storage:
         except Exception as e:
             log.error("storage_get_recent_events_failed", error=str(e))
             return []
+
+    # --- Chat Messages (Phase 9) ---
+
+    async def save_chat_message(self, msg: dict) -> None:
+        """Persist a single chat message. Idempotent (INSERT OR IGNORE)."""
+        try:
+            await self._db.execute(
+                """INSERT OR IGNORE INTO chat_messages
+                   (id, negotiation_id, sender_url, sender_name, message, message_type, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    msg["id"],
+                    msg["negotiation_id"],
+                    msg["sender_url"],
+                    msg["sender_name"],
+                    msg["message"],
+                    msg.get("message_type", "agent"),
+                    msg["timestamp"],
+                ),
+            )
+            await self._db.commit()
+        except Exception as e:
+            log.error("storage_save_chat_message_failed", id=msg.get("id"), error=str(e))
+            raise StorageError(f"Failed to save chat message: {e}") from e
+
+    async def get_chat_messages(self, negotiation_id: str, limit: int = 100) -> list[dict]:
+        """Get chat messages for a negotiation, ordered chronologically."""
+        try:
+            async with self._db.execute(
+                "SELECT * FROM chat_messages WHERE negotiation_id = ? ORDER BY timestamp ASC LIMIT ?",
+                (negotiation_id, limit),
+            ) as cur:
+                return [dict(row) async for row in cur]
+        except Exception as e:
+            log.error("storage_get_chat_messages_failed", negotiation_id=negotiation_id, error=str(e))
+            return []
+
+    async def get_chat_message_count(self, negotiation_id: str) -> int:
+        """Count chat messages for a negotiation."""
+        try:
+            async with self._db.execute(
+                "SELECT COUNT(*) as cnt FROM chat_messages WHERE negotiation_id = ?",
+                (negotiation_id,),
+            ) as cur:
+                row = await cur.fetchone()
+                return row["cnt"] if row else 0
+        except Exception as e:
+            log.error("storage_get_chat_count_failed", negotiation_id=negotiation_id, error=str(e))
+            return 0

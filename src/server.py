@@ -45,6 +45,7 @@ def create_app(
     tunnel_info=None,
     own_url: str | None = None,
     config=None,
+    chat_manager=None,
 ) -> FastAPI:
     """Create the FastAPI application with all services mounted."""
 
@@ -635,6 +636,11 @@ def create_app(
                     if role.negotiation_id == negotiation_id:
                         await project_manager.sync(p.id)
                         break
+        # Auto-start chat after confirmed (Phase 9)
+        if chat_manager and result.get("status") == "confirmed":
+            neg = negotiation_manager.get_negotiation(negotiation_id)
+            if neg:
+                asyncio.ensure_future(_start_chat_after_confirm(neg))
         await _ws_push_negotiations()
         await _ws_push_health()
         return result
@@ -733,6 +739,85 @@ def create_app(
             return {"error": "Project manager not configured"}
         return await project_manager.complete(project_id)
 
+    # ── Chat API (Phase 9) ──────────────────────────────────────
+
+    async def _start_chat_after_confirm(neg) -> None:
+        """Background task: start chat after negotiation is confirmed."""
+        try:
+            neg_info = {
+                "id": neg.id,
+                "their_url": neg.their_url,
+                "their_name": neg.their_name,
+                "our_name": neg.our_name,
+                "collaboration_summary": neg.collaboration_summary,
+            }
+            await chat_manager.start_chat(neg_info)
+            await _ws_push_chat()
+        except Exception as e:
+            log.error("chat_auto_start_error", error=str(e), neg_id=neg.id)
+
+    @app.get("/chats")
+    async def list_chats():
+        """List all chat channels (confirmed negotiations)."""
+        if not chat_manager:
+            return {"chats": []}
+        chats = await chat_manager.get_chats()
+        return {"chats": chats, "chat_mode": chat_manager.chat_mode}
+
+    @app.get("/chats/{negotiation_id}/messages")
+    async def get_chat_messages(negotiation_id: str):
+        """Get chat message history for a negotiation."""
+        if not chat_manager:
+            return {"messages": []}
+        messages = await chat_manager.get_messages(negotiation_id)
+        return {"messages": messages, "count": len(messages)}
+
+    @app.post("/chats/{negotiation_id}/send")
+    async def send_chat_message(negotiation_id: str, request: Request):
+        """Owner sends a chat message (manual mode or 'Join' in auto mode)."""
+        if not chat_manager:
+            return JSONResponse({"error": "Chat not configured"}, status_code=503)
+        body, err = await _safe_json(request)
+        if err:
+            return err
+        text = body.get("message", "").strip()
+        if not text:
+            return JSONResponse({"error": "Message text required"}, status_code=400)
+
+        # Get peer URL from negotiation
+        their_url = ""
+        if negotiation_manager:
+            neg = negotiation_manager.get_negotiation(negotiation_id)
+            if neg:
+                their_url = neg.their_url
+
+        msg = await chat_manager.send_owner_message(negotiation_id, text, their_url)
+        await _ws_push_chat()
+        return msg
+
+    @app.post("/chats/{negotiation_id}/start")
+    async def start_chat(negotiation_id: str):
+        """Manually start a chat for a confirmed negotiation."""
+        if not chat_manager:
+            return JSONResponse({"error": "Chat not configured"}, status_code=503)
+        if not negotiation_manager:
+            return JSONResponse({"error": "Negotiation not configured"}, status_code=503)
+        neg = negotiation_manager.get_negotiation(negotiation_id)
+        if not neg:
+            return JSONResponse({"error": f"Negotiation {negotiation_id} not found"}, status_code=404)
+        neg_info = {
+            "id": neg.id,
+            "their_url": neg.their_url,
+            "their_name": neg.their_name,
+            "our_name": neg.our_name,
+            "collaboration_summary": neg.collaboration_summary,
+        }
+        msg = await chat_manager.start_chat(neg_info)
+        await _ws_push_chat()
+        if msg:
+            return msg
+        return {"status": "chat_already_started_or_manual_mode"}
+
     # ── WebSocket Endpoint (Phase 6.8) ─────────────────────────
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
@@ -793,6 +878,13 @@ def create_app(
             return
         negs = negotiation_manager.get_all_negotiations()
         await ws_manager.push_state("negotiations", [n.to_dict() for n in negs])
+
+    async def _ws_push_chat():
+        """Push chat update to WS subscribers."""
+        if not chat_manager or ws_manager.client_count == 0:
+            return
+        chats = await chat_manager.get_chats()
+        await ws_manager.push_state("chat", chats)
 
     async def _ws_push_health():
         """Push health state to WS subscribers."""
@@ -1012,6 +1104,7 @@ def create_app(
         agent_card,
         negotiation_manager=negotiation_manager,
         privacy_guard=privacy_guard,
+        chat_manager=chat_manager,
     )
     app.mount("/", a2a_app)
 

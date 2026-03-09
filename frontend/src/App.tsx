@@ -6,6 +6,7 @@ import EventFeed from './components/EventFeed'
 import ProfileEditor from './components/ProfileEditor'
 import ProjectList from './components/ProjectList'
 import NetworkPanel from './components/NetworkPanel'
+import ChatPanel from './components/ChatPanel'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   connectWebSocket,
@@ -13,15 +14,17 @@ import {
   type AgentEvent,
   type Match,
   type Negotiation,
+  type ChatChannel,
 } from './api'
 
-type Tab = 'dashboard' | 'network' | 'matches' | 'projects' | 'profile'
+type Tab = 'dashboard' | 'network' | 'matches' | 'projects' | 'chat' | 'profile'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '\u{1F3E0}' },
   { id: 'network', label: 'Network', icon: '\u{1F310}' },
   { id: 'matches', label: 'Matches', icon: '\u{1F3AF}' },
   { id: 'projects', label: 'Projects', icon: '\u{1F4CB}' },
+  { id: 'chat', label: 'Chat', icon: '\u{1F4AC}' },
   { id: 'profile', label: 'Profile', icon: '\u{1F464}' },
 ]
 
@@ -34,6 +37,9 @@ export default function App() {
   const [wsMatches, setWsMatches] = useState<Match[] | null>(null)
   const [wsNegotiations, setWsNegotiations] = useState<Negotiation[] | null>(null)
   const [wsEvents, setWsEvents] = useState<AgentEvent[]>([])
+  const [wsChats, setWsChats] = useState<ChatChannel[] | null>(null)
+  const [chatNegId, setChatNegId] = useState<string | null>(null)
+  const [unreadChats, setUnreadChats] = useState(0)
   const wsRef = useRef<{ close: () => void; send: (msg: any) => void } | null>(null)
 
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1)
@@ -58,6 +64,17 @@ export default function App() {
     setPendingCount(pending)
   }, [])
 
+  const handleChatUpdate = useCallback((chats: ChatChannel[]) => {
+    setWsChats(chats)
+    const total = chats.reduce((sum, c) => sum + c.message_count, 0)
+    setUnreadChats(total > 0 ? chats.length : 0)
+  }, [])
+
+  const openChat = useCallback((negId: string) => {
+    setChatNegId(negId)
+    setActiveTab('chat')
+  }, [])
+
   // WebSocket connection
   useEffect(() => {
     const conn = connectWebSocket({
@@ -65,11 +82,12 @@ export default function App() {
       onHealthUpdate: handleHealthUpdate,
       onMatchesUpdate: handleMatchesUpdate,
       onNegotiationsUpdate: handleNegotiationsUpdate,
+      onChatUpdate: handleChatUpdate,
       onConnectionChange: setWsConnected,
     })
     wsRef.current = conn
     return () => conn.close()
-  }, [handleEvent, handleHealthUpdate, handleMatchesUpdate, handleNegotiationsUpdate])
+  }, [handleEvent, handleHealthUpdate, handleMatchesUpdate, handleNegotiationsUpdate, handleChatUpdate])
 
   // Fallback polling for pending count (only when WS not connected)
   useEffect(() => {
@@ -107,6 +125,9 @@ export default function App() {
             {tab.id === 'matches' && pendingCount > 0 && (
               <span className="tab-badge">{pendingCount}</span>
             )}
+            {tab.id === 'chat' && unreadChats > 0 && (
+              <span className="tab-badge">{unreadChats}</span>
+            )}
           </button>
         ))}
       </nav>
@@ -120,6 +141,7 @@ export default function App() {
                 <NegotiationList
                   refreshTrigger={refreshTrigger}
                   wsNegotiations={wsNegotiations}
+                  onOpenChat={openChat}
                 />
               </>
             )}
@@ -137,6 +159,10 @@ export default function App() {
 
             {activeTab === 'projects' && (
               <ProjectList refreshTrigger={refreshTrigger} />
+            )}
+
+            {activeTab === 'chat' && (
+              <ChatPanel wsChats={wsChats} initialChatId={chatNegId} />
             )}
 
             {activeTab === 'profile' && (
