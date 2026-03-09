@@ -13,8 +13,9 @@ data/
 frontend/node_modules/
 frontend/dist/
 
-# Visualization demo (not needed in production)
-viz/
+# Viz dev artifacts (rebuilt in Docker)
+viz/node_modules/
+viz/dist/
 
 # IDE / OS
 .cursor/
