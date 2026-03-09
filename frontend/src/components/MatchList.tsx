@@ -93,18 +93,18 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           {filtered.map((m, idx) => (
             <div key={m.agent_url} className="match-card stagger-item">
               <div className="match-header">
-                <span className="match-name">{m.agent_name}</span>
-                <div className="match-meta">
-                  <span className="score">{(m.overall_score * 100).toFixed(0)}%</span>
+                <div className="match-title-row">
+                  <span className="match-name">{m.agent_name}</span>
                   {m.is_mutual && <span className="badge badge-confirmed">Mutual</span>}
                 </div>
+                <span className="score">{(m.overall_score * 100).toFixed(0)}%</span>
               </div>
               <p className="match-desc">{m.description}</p>
               <div className="match-reasons">
-                {m.top_matches?.slice(0, 3).map((sm, i) => (
+                {m.top_matches?.slice(0, 2).map((sm, i) => (
                   <div key={i} className="reason">
-                    <span className="reason-dir">
-                      {sm.direction === 'we_need_they_offer' ? '< they offer' : '> we offer'}
+                    <span className={`reason-dir ${sm.direction === 'we_need_they_offer' ? 'dir-they' : 'dir-we'}`}>
+                      {sm.direction === 'we_need_they_offer' ? 'THEY' : 'WE'}
                     </span>
                     <span className="reason-score">{(sm.similarity * 100).toFixed(0)}%</span>
                     <span className="reason-text">
@@ -138,12 +138,16 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           padding: 32px;
           color: var(--text-muted);
         }
-        .match-list { display: flex; flex-direction: column; gap: 12px; }
+        .match-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 10px;
+        }
         .match-card {
           background: var(--bg-secondary);
           border: 1px solid var(--border);
           border-radius: var(--radius-sm);
-          padding: 16px;
+          padding: 12px 14px;
           transition: border-color 0.2s;
         }
         .match-card:hover {
@@ -153,45 +157,63 @@ export default function MatchList({ onRefresh, wsMatches }: Props) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
+          gap: 8px;
         }
-        .match-name { font-weight: 600; font-size: 15px; }
-        .match-meta { display: flex; gap: 8px; align-items: center; }
+        .match-title-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+        }
+        .match-name {
+          font-weight: 600;
+          font-size: 14px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .score {
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 700;
           color: var(--accent-light);
+          flex-shrink: 0;
         }
         .match-desc {
-          font-size: 13px;
-          color: var(--text-secondary);
-          margin-bottom: 12px;
-          line-height: 1.5;
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+          line-height: 1.4;
           display: -webkit-box;
-          -webkit-line-clamp: 2;
+          -webkit-line-clamp: 1;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .match-reasons { display: flex; flex-direction: column; gap: 6px; }
+        .match-reasons { display: flex; flex-direction: column; gap: 3px; }
         .reason {
           display: flex;
           align-items: center;
-          gap: 8px;
-          font-size: 12px;
+          gap: 6px;
+          font-size: 11px;
+          line-height: 1.3;
         }
         .reason-dir {
-          color: var(--text-muted);
-          font-size: 10px;
-          min-width: 70px;
-          text-transform: uppercase;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          min-width: 28px;
+          flex-shrink: 0;
         }
+        .dir-they { color: var(--success); }
+        .dir-we { color: var(--accent-light); }
         .reason-score {
-          color: var(--accent-light);
+          color: var(--text-secondary);
           font-weight: 600;
-          min-width: 30px;
+          min-width: 26px;
+          flex-shrink: 0;
         }
         .reason-text {
-          color: var(--text-secondary);
+          color: var(--text-muted);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
