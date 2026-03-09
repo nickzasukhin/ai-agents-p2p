@@ -27,6 +27,15 @@ class AgentConfig(BaseSettings):
     chat_mode: str = "auto"  # "auto" = agent chats via LLM; "manual" = owner chats manually
     chat_max_rounds: int = 10  # Max auto-reply rounds per chat
 
+    # --- API Security (Phase 10) ---
+    api_token: str = ""                          # Bearer token for owner endpoints (empty = no auth)
+    trusted_proxies: list[str] = ["127.0.0.1"]   # Trusted proxy IPs for X-Forwarded-For
+
+    # --- Registry (Phase 10) ---
+    registry_urls: list[str] = []       # List of registry URLs (our + external)
+    registry_interval: int = 300        # Re-register interval in seconds
+    a2a_registry_enabled: bool = True   # Auto-register on a2aregistry.org
+
     # --- Production Hardening (Phase 6.6) ---
     cors_origins: list[str] = ["*"]        # Allowed CORS origins
     http_timeout: float = 10.0             # Default httpx client timeout (seconds)
@@ -67,4 +76,12 @@ class AgentConfig(BaseSettings):
         parent = Path(v).parent
         if parent.exists() and not os.access(str(parent), os.W_OK):
             raise ValueError(f"Parent directory not writable: {parent}")
+        return v
+
+    @field_validator("registry_urls", mode="before")
+    @classmethod
+    def parse_registry_urls(cls, v):
+        """Parse registry URLs from comma-separated string or list."""
+        if isinstance(v, str):
+            return [u.strip() for u in v.split(",") if u.strip()]
         return v

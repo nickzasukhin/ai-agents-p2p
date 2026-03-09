@@ -23,6 +23,7 @@ from src.privacy.guard import PrivacyGuard
 from src.notification.events import EventType
 from src.negotiation.project_manager import ProjectManager
 from src.notification.websocket import WSConnectionManager
+from src.security.middleware import AuthMiddleware
 
 log = structlog.get_logger()
 
@@ -72,6 +73,7 @@ def create_app(
         log.info("relay_mode_enabled")
 
     # CORS for frontend
+    api_token = config.api_token if config else ""
     cors_origins = config.cors_origins if config else ["*"]
     app.add_middleware(
         CORSMiddleware,
@@ -79,6 +81,11 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Auth middleware (Phase 10) — must be added after CORS
+    if api_token:
+        app.add_middleware(AuthMiddleware, api_token=api_token)
+        log.info("auth_middleware_enabled")
 
     # ── WebSocket Manager (Phase 6.8) ────────────────────────────
     ws_manager = WSConnectionManager()

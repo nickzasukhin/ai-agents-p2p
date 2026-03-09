@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from src.discovery.registry import StaticRegistry
 from src.discovery.gossip import GossipProtocol
+from src.discovery.registry_client import RegistryClient
 from src.a2a_client.client import A2AClient, DiscoveredAgent
 from src.matching.engine import MatchingEngine, AgentMatch
 from src.matching.scorer import MatchContext
@@ -47,6 +48,9 @@ class DiscoveryLoop:
         dht_agent_info: dict | None = None,
         storage=None,
         our_tags: list[str] | None = None,
+        registry_client: RegistryClient | None = None,
+        registry_urls: list[str] | None = None,
+        a2a_registry_enabled: bool = True,
     ):
         self.registry = registry
         self.a2a_client = a2a_client
@@ -58,6 +62,9 @@ class DiscoveryLoop:
         self.dht_agent_info = dht_agent_info or {}
         self.storage = storage
         self.our_tags = our_tags or []
+        self.registry_client = registry_client
+        self.registry_urls = registry_urls or []
+        self.a2a_registry_enabled = a2a_registry_enabled
         self.state = DiscoveryState()
         self._task: asyncio.Task | None = None
 
@@ -102,6 +109,24 @@ class DiscoveryLoop:
             )
         else:
             log.info("discovery_no_agents_found")
+
+        # Step 3b: Fetch from public registries (Phase 10)
+        if self.registry_client and (self.registry_urls or self.a2a_registry_enabled):
+            try:
+                registry_agents = await self.registry_client.fetch_all(
+                    self.registry_urls,
+                    a2a_registry_enabled=self.a2a_registry_enabled,
+                )
+                new_from_registry = 0
+                for agent_info in registry_agents:
+                    agent_url = agent_info.get("url", "").rstrip("/")
+                    if agent_url and agent_url not in self.registry.get_all_urls():
+                        self.registry.add(agent_url)
+                        new_from_registry += 1
+                if new_from_registry:
+                    log.info("discovery_registry_new_peers", count=new_from_registry)
+            except Exception as e:
+                log.debug("discovery_registry_error", error=str(e))
 
         # Step 4: Run gossip exchange (Phase 5.3)
         if self.gossip:
