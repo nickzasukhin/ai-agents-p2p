@@ -72,13 +72,35 @@ class DiscoveryLoop:
         """Run a single discovery + matching cycle."""
         log.info("discovery_cycle_start", run=self.state.runs_completed + 1)
 
-        # Step 1: Get URLs from registry
+        # Step 1: Fetch from public registries first (Phase 10)
+        # This populates the local registry with agents before discovery
+        if self.registry_client and (self.registry_urls or self.a2a_registry_enabled):
+            try:
+                registry_agents = await self.registry_client.fetch_all(
+                    self.registry_urls,
+                    a2a_registry_enabled=self.a2a_registry_enabled,
+                )
+                new_from_registry = 0
+                known_urls = {u.rstrip("/") for u in self.registry.get_all_urls()}
+                for agent_info in registry_agents:
+                    agent_url = agent_info.get("url", "").rstrip("/")
+                    if agent_url and agent_url not in known_urls:
+                        self.registry.add(agent_url)
+                        known_urls.add(agent_url)
+                        new_from_registry += 1
+                if new_from_registry:
+                    self.registry.save()
+                    log.info("discovery_registry_new_peers", count=new_from_registry)
+            except Exception as e:
+                log.debug("discovery_registry_error", error=str(e))
+
+        # Step 2: Get URLs from registry
         urls = self.registry.get_all_urls()
         if not urls:
             log.info("discovery_no_peers")
             return []
 
-        # Step 2: Fetch Agent Cards
+        # Step 3: Fetch Agent Cards
         discovered = await self.a2a_client.discover_agents(urls)
 
         # Update registry statuses
@@ -94,7 +116,7 @@ class DiscoveryLoop:
         for agent in discovered:
             self.state.discovered_agents[agent.url] = agent
 
-        # Step 3: Build match contexts (Phase 6.7) and run matching
+        # Step 4: Build match contexts (Phase 6.7) and run matching
         if discovered:
             match_contexts = await self._build_match_contexts(discovered)
             self.state.matches = self.matching.find_matches(
@@ -109,24 +131,6 @@ class DiscoveryLoop:
             )
         else:
             log.info("discovery_no_agents_found")
-
-        # Step 3b: Fetch from public registries (Phase 10)
-        if self.registry_client and (self.registry_urls or self.a2a_registry_enabled):
-            try:
-                registry_agents = await self.registry_client.fetch_all(
-                    self.registry_urls,
-                    a2a_registry_enabled=self.a2a_registry_enabled,
-                )
-                new_from_registry = 0
-                for agent_info in registry_agents:
-                    agent_url = agent_info.get("url", "").rstrip("/")
-                    if agent_url and agent_url not in self.registry.get_all_urls():
-                        self.registry.add(agent_url)
-                        new_from_registry += 1
-                if new_from_registry:
-                    log.info("discovery_registry_new_peers", count=new_from_registry)
-            except Exception as e:
-                log.debug("discovery_registry_error", error=str(e))
 
         # Step 4: Run gossip exchange (Phase 5.3)
         if self.gossip:
