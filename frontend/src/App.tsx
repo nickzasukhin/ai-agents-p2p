@@ -7,6 +7,7 @@ import ProfileEditor from './components/ProfileEditor'
 import ProjectList from './components/ProjectList'
 import NetworkPanel from './components/NetworkPanel'
 import ChatPanel from './components/ChatPanel'
+import TokenDialog from './components/TokenDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   connectWebSocket,
@@ -105,9 +106,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo">
-          <span className="logo-icon">&#x1F310;</span>
-          <h1>Agent Social Network</h1>
+        <div className="header-row">
+          <div className="logo">
+            <span className="logo-icon">&#x1F310;</span>
+            <h1>Agent Social Network</h1>
+          </div>
+          <TokenDialog />
         </div>
         <p className="subtitle">P2P AI Agent Discovery & Collaboration</p>
       </header>
@@ -185,6 +189,12 @@ export default function App() {
         .app-header {
           text-align: center;
           margin-bottom: 20px;
+        }
+        .header-row {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
         }
         .logo {
           display: flex;
