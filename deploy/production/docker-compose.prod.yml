@@ -52,7 +52,7 @@ services:
       ORCH_EMAIL_FROM: ${ORCH_EMAIL_FROM:-noreply@devpunks.io}
       ORCH_ADMIN_EMAILS: ${ORCH_ADMIN_EMAILS:-[]}
     ports:
-      - "8001:8000"
+      - "8002:8000"
     volumes:
       - orchestrator-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
