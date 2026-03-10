@@ -1127,6 +1127,75 @@ def create_app(
             "tunnel_provider": tunnel.provider if tunnel else None,
         }
 
+    # ── Global Search (Phase 12.5) ──────────────────────────────
+    @app.get("/search")
+    async def search_agents(q: str = "", limit: int = 20):
+        """Search agents by natural language query across local + registries.
+
+        Query params:
+            q: search query text
+            limit: max results (default 20)
+        """
+        if not q.strip():
+            return {"query": "", "results": [], "total": 0}
+
+        results: list[dict] = []
+        limit = min(limit, 100)
+
+        # Search local discovered agents using embeddings
+        if discovery_loop and hasattr(discovery_loop, 'discovered_agents'):
+            try:
+                from src.matching.engine import MatchingEngine
+                engine = MatchingEngine()
+                agents = list(discovery_loop.discovered_agents.values())
+                local_results = engine.search_agents(q, agents, limit=limit)
+                for r in local_results:
+                    r["source"] = "local"
+                results.extend(local_results)
+            except Exception as e:
+                log.warning("search_local_error", error=str(e))
+
+        # Search registries via API
+        if config and config.registry_urls:
+            import httpx as httpx_mod
+            for reg_url in config.registry_urls:
+                try:
+                    search_url = f"{reg_url.rstrip('/')}/agents"
+                    async with httpx_mod.AsyncClient(timeout=5.0) as client:
+                        resp = await client.get(search_url, params={"q": q})
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            for agent in data.get("agents", []):
+                                results.append({
+                                    "agent_url": agent.get("url", ""),
+                                    "agent_name": agent.get("name", ""),
+                                    "description": agent.get("description", ""),
+                                    "skills": agent.get("skills", []),
+                                    "match_score": agent.get("score", 0.5),
+                                    "source": reg_url,
+                                })
+                except Exception as e:
+                    log.warning("search_registry_error", registry=reg_url, error=str(e))
+
+        # Deduplicate by agent_url
+        seen_urls = set()
+        deduped = []
+        for r in results:
+            url = r.get("agent_url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                deduped.append(r)
+
+        # Sort by match_score descending
+        deduped.sort(key=lambda r: r.get("match_score", 0), reverse=True)
+        deduped = deduped[:limit]
+
+        return {
+            "query": q,
+            "results": deduped,
+            "total": len(deduped),
+        }
+
     # ── Peer Management (Phase 12.1) ─────────────────────────────
     @app.post("/peers/add")
     async def add_peer(request: Request):

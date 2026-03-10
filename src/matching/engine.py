@@ -254,3 +254,71 @@ class MatchingEngine:
         )
 
         return matches
+
+    def search_agents(
+        self,
+        query_text: str,
+        agents: list[DiscoveredAgent],
+        limit: int = 20,
+    ) -> list[dict]:
+        """Search agents by natural language query using embedding similarity.
+
+        Compares the query against each agent's skills and description.
+
+        Args:
+            query_text: Natural language search query.
+            agents: List of discovered agents to search through.
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of dicts sorted by match_score (best first):
+            [{agent_url, agent_name, description, skills, match_score, source}]
+        """
+        if not query_text or not agents:
+            return []
+
+        query_embedding = self.embeddings.embed(query_text)
+
+        results = []
+        for agent in agents:
+            # Build a text representation of the agent
+            skill_texts = self._parse_card_skills(agent)
+            desc = agent.card.description or ""
+
+            # Combine description + skills for matching
+            combined_texts = []
+            if desc:
+                combined_texts.append(desc)
+            combined_texts.extend(skill_texts)
+
+            if not combined_texts:
+                continue
+
+            # Compute similarity against each text
+            text_embeddings = self.embeddings.embed_batch(combined_texts)
+            similarities = [
+                float(EmbeddingEngine.cosine_similarity(query_embedding, emb))
+                for emb in text_embeddings
+            ]
+
+            # Use max similarity as the match score
+            match_score = max(similarities) if similarities else 0.0
+
+            if match_score >= 0.2:  # Low threshold for search
+                results.append({
+                    "agent_url": agent.url,
+                    "agent_name": agent.card.name,
+                    "description": desc,
+                    "skills": [
+                        {"name": s.name, "description": s.description, "tags": s.tags}
+                        for s in (agent.card.skills or [])
+                    ],
+                    "match_score": round(match_score, 4),
+                    "source": "local",
+                })
+
+        # Sort by score descending
+        results.sort(key=lambda r: r["match_score"], reverse=True)
+
+        log.info("search_complete", query=query_text[:50], candidates=len(agents), results=len(results))
+        return results[:limit]
