@@ -98,8 +98,8 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           <div style={{ marginBottom: spacing.md }}>
             <div style={{ color: colors.textMuted, fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs }}>Skills</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.xs }}>
-              {inviteData.skills.map((s, i) => (
-                <Badge key={i} variant="accent">{s}</Badge>
+              {inviteData.skills.map((s: any, i) => (
+                <Badge key={i} variant="accent">{typeof s === 'string' ? s : s.name || String(s)}</Badge>
               ))}
             </div>
           </div>
