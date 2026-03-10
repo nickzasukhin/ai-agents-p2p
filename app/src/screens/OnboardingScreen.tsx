@@ -195,7 +195,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 <div style={{ color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }}>Looking For</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.xs }}>
                   {(cardPreview.needs || []).map((n: any, i: number) => (
-                    <Badge key={i} variant="success">{typeof n === 'string' ? n : n.name || String(n)}</Badge>
+                    <Badge key={i} variant="success">{typeof n === 'string' ? n : n.name || n.description || String(n)}</Badge>
                   ))}
                 </div>
               </div>
