@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
 
@@ -126,6 +126,12 @@ def create_app(
             return body, None
         except Exception:
             return None, JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    # ── HTML escape helper (Phase 12.2) ────────────────────────────
+    def _esc(text: str) -> str:
+        """Escape HTML special characters for safe embedding."""
+        import html as _html_mod
+        return _html_mod.escape(str(text), quote=True)
 
     # ── Card Regeneration (Phase 6.1) ──────────────────────────────
     async def rebuild_agent_card() -> dict:
@@ -1104,6 +1110,156 @@ def create_app(
 
         log.info("peer_added", url=peer_url, name=result["agent"]["name"], match_score=match_score)
         return result
+
+    # ── Invite Links (Phase 12.2) ────────────────────────────────
+    @app.get("/invite/data")
+    async def invite_data():
+        """Return invite data as JSON for programmatic use."""
+        card = app.state.agent_card
+        agent_did = did_manager.did if did_manager else ""
+        return {
+            "agent_name": card.name,
+            "description": card.description or "",
+            "skills": [
+                {"name": s.name, "description": s.description, "tags": s.tags}
+                for s in (card.skills or [])
+            ],
+            "agent_url": app.state.own_url,
+            "did": agent_did,
+        }
+
+    @app.get("/invite")
+    async def invite_page():
+        """Render shareable HTML invite page with Open Graph meta tags."""
+        card = app.state.agent_card
+        agent_url = app.state.own_url
+        name = card.name or "AI Agent"
+        desc = card.description or "An AI agent on the DevPunks P2P network."
+        skills_list = card.skills or []
+        skills_text = ", ".join(s.name for s in skills_list[:5])
+        if len(skills_list) > 5:
+            skills_text += f" +{len(skills_list) - 5} more"
+
+        # Build skill tags HTML
+        skill_tags_html = ""
+        for s in skills_list[:8]:
+            skill_tags_html += (
+                f'<span style="display:inline-block;background:#1a1a2e;'
+                f'border:1px solid #E50051;border-radius:20px;padding:6px 14px;'
+                f'margin:4px;font-size:14px;color:#fff">{_esc(s.name)}</span>\n'
+            )
+
+        og_title = f"{name} — DevPunks Agent Network"
+        og_desc = desc[:200] if len(desc) > 200 else desc
+        if skills_text:
+            og_desc = f"{og_desc} | Skills: {skills_text}"
+        og_desc = og_desc[:300]
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{_esc(og_title)}</title>
+
+<!-- Open Graph / Social Preview -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="{_esc(og_title)}">
+<meta property="og:description" content="{_esc(og_desc)}">
+<meta property="og:url" content="{_esc(agent_url)}/invite">
+<meta property="og:site_name" content="DevPunks Agent Network">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{_esc(og_title)}">
+<meta name="twitter:description" content="{_esc(og_desc)}">
+
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    background: #0a0a0f;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }}
+  .card {{
+    background: #12121a;
+    border: 1px solid #1a1a2e;
+    border-radius: 16px;
+    max-width: 480px;
+    width: 100%;
+    padding: 40px 32px;
+    text-align: center;
+  }}
+  .logo {{
+    color: #E50051;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }}
+  .agent-name {{
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }}
+  .description {{
+    color: #8888aa;
+    font-size: 16px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+  }}
+  .skills {{
+    margin-bottom: 28px;
+  }}
+  .skills-label {{
+    color: #555570;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }}
+  .connect-btn {{
+    display: inline-block;
+    background: #E50051;
+    color: #fff;
+    text-decoration: none;
+    padding: 14px 36px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background 0.2s;
+  }}
+  .connect-btn:hover {{ background: #FF1A6C; }}
+  .url {{
+    color: #555570;
+    font-size: 12px;
+    margin-top: 16px;
+    word-break: break-all;
+  }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">DevPunks Agent Network</div>
+  <h1 class="agent-name">{_esc(name)}</h1>
+  <p class="description">{_esc(desc)}</p>
+  <div class="skills">
+    <div class="skills-label">Skills</div>
+    {skill_tags_html if skill_tags_html else '<span style="color:#555570">No skills listed</span>'}
+  </div>
+  <a class="connect-btn" href="{_esc(agent_url)}/.well-known/agent-card.json">
+    View Agent Card
+  </a>
+  <div class="url">{_esc(agent_url)}</div>
+</div>
+</body>
+</html>"""
+        return HTMLResponse(content=html)
 
     # ── Relay Endpoints (Phase 6.3) ────────────────────────────────
     if relay_store:
