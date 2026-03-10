@@ -1012,6 +1012,121 @@ def create_app(
         )
         return result
 
+    # ── Go Online (Phase 12.4) ──────────────────────────────────
+    @app.post("/network/go-online")
+    async def go_online():
+        """One-click: start tunnel → update URL → re-sign card → register → discover.
+
+        Tries tunnel providers in order: bore → cloudflared → ngrok.
+        Falls back to current URL if no tunnel available.
+        """
+        from src.network.tunnel import start_tunnel, TunnelInfo
+        from src.discovery.registry_client import RegistryClient
+
+        current_url = app.state.own_url
+        tunnel_provider = None
+        public_url = current_url
+        tunnel_started = False
+
+        # Skip tunnel if already on a public URL
+        is_local = "localhost" in current_url or "127.0.0.1" in current_url
+        existing_tunnel = app.state.tunnel_info
+
+        if is_local and not existing_tunnel:
+            # Try tunnel providers in order
+            local_port = config.port if config else 9000
+            for provider in ["bore", "cloudflared", "ngrok"]:
+                log.info("go_online_trying_tunnel", provider=provider)
+                tunnel = await start_tunnel(provider, local_port)
+                if tunnel:
+                    public_url = tunnel.public_url
+                    tunnel_provider = provider
+                    tunnel_started = True
+                    app.state.tunnel_info = tunnel
+                    app.state.own_url = public_url
+                    log.info("go_online_tunnel_ready", provider=provider, url=public_url)
+                    break
+        elif existing_tunnel:
+            public_url = existing_tunnel.public_url
+            tunnel_provider = existing_tunnel.provider
+            tunnel_started = True
+
+        # Update agent card URL if it changed
+        if public_url != app.state.agent_card.url:
+            import json as json_mod
+            card_dict = json_mod.loads(app.state.agent_card.model_dump_json())
+            card_dict["url"] = public_url
+            from a2a.types import AgentCard as AgentCardType
+            app.state.agent_card = AgentCardType(**card_dict)
+            log.info("go_online_card_url_updated", new_url=public_url)
+
+            # Re-sign card with DID if available
+            if did_manager:
+                try:
+                    card_dict_updated = json_mod.loads(app.state.agent_card.model_dump_json())
+                    signed = did_manager.sign_card(card_dict_updated)
+                    log.info("go_online_card_re_signed")
+                except Exception as e:
+                    log.warning("go_online_sign_failed", error=str(e))
+
+        # Register with registries
+        registered_registries: list[str] = []
+        registry_client = RegistryClient()
+
+        # Register with configured registries
+        if config and config.registry_urls:
+            for reg_url in config.registry_urls:
+                try:
+                    ok = await registry_client.register(reg_url, public_url)
+                    if ok:
+                        registered_registries.append(reg_url)
+                except Exception as e:
+                    log.warning("go_online_register_failed", registry=reg_url, error=str(e))
+
+        # Register with a2aregistry.org
+        if config and config.a2a_registry_enabled and not is_local:
+            try:
+                ok = await registry_client.register_a2a_global(public_url)
+                if ok:
+                    registered_registries.append("https://a2aregistry.org")
+            except Exception as e:
+                log.warning("go_online_a2a_register_failed", error=str(e))
+
+        # Trigger discovery run
+        discovery_triggered = False
+        if discovery_loop:
+            try:
+                discovery_loop.run_once()
+                discovery_triggered = True
+            except Exception as e:
+                log.warning("go_online_discovery_failed", error=str(e))
+
+        result = {
+            "status": "online" if tunnel_started or not is_local else "local_only",
+            "public_url": public_url,
+            "tunnel_provider": tunnel_provider,
+            "tunnel_started": tunnel_started,
+            "registered_registries": registered_registries,
+            "discovery_triggered": discovery_triggered,
+        }
+
+        log.info("go_online_complete", **result)
+        return result
+
+    @app.get("/network/go-online/status")
+    async def go_online_status():
+        """Check current online status."""
+        tunnel = app.state.tunnel_info
+        current_url = app.state.own_url
+        is_local = "localhost" in current_url or "127.0.0.1" in current_url
+
+        return {
+            "is_online": not is_local or (tunnel is not None),
+            "public_url": tunnel.public_url if tunnel else current_url,
+            "tunnel_active": tunnel is not None and tunnel.to_dict().get("running", False),
+            "tunnel_provider": tunnel.provider if tunnel else None,
+        }
+
     # ── Peer Management (Phase 12.1) ─────────────────────────────
     @app.post("/peers/add")
     async def add_peer(request: Request):

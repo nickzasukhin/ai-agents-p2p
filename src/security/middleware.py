@@ -27,6 +27,7 @@ OWNER_PATHS = [
     ("/events/", "DELETE"),           # clear events
     ("/peers/", "POST"),             # add peer by URL (Phase 12.1)
     ("/onboarding/", "POST"),        # onboarding interview (Phase 12.3)
+    ("/network/go-online", "POST"),  # go online (Phase 12.4)
 ]
 
 # Paths that are always open (peer-facing / read-only)
