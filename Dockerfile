@@ -7,7 +7,16 @@ RUN npm ci --ignore-scripts
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 1b: Build 3D visualization ────────────────────────
+# ── Stage 1b: Build user app ──────────────────────────────────
+FROM node:20-alpine AS app-build
+
+WORKDIR /app/app
+COPY app/package.json app/package-lock.json* ./
+RUN npm ci --ignore-scripts
+COPY app/ ./
+RUN npm run build
+
+# ── Stage 1c: Build 3D visualization ────────────────────────
 FROM node:20-alpine AS viz-build
 
 WORKDIR /app/viz
@@ -43,8 +52,9 @@ COPY scripts/ scripts/
 # Pre-download sentence-transformers model into image
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Copy built frontend + viz
+# Copy built frontend (admin), user app + viz
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
+COPY --from=app-build /app/app/dist /app/app/dist
 COPY --from=viz-build /app/viz/dist /app/viz/dist
 
 # Default data directory (mount a volume here for persistence)

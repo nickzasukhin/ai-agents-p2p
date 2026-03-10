@@ -1658,23 +1658,39 @@ def create_app(
             media_type="application/json",
         )
 
-    # ── Optional frontend static serving ────────────────────────
-    # When frontend/dist exists (e.g. inside Docker), serve the SPA directly.
-    # This enables single-container operation without an external nginx.
+    # ── Optional admin dashboard static serving (at /admin) ─────
+    # Admin dashboard (monitoring, editing, logs) — the original React frontend.
     frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
     _serving_frontend = False
 
     if frontend_dist.is_dir() and (frontend_dist / "index.html").exists():
         assets_dir = frontend_dist / "assets"
         if assets_dir.is_dir():
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+            app.mount("/admin/assets", StaticFiles(directory=str(assets_dir)), name="admin-assets")
 
-        @app.get("/")
-        async def serve_spa_root():
+        @app.get("/admin")
+        @app.get("/admin/{rest_of_path:path}")
+        async def serve_admin(rest_of_path: str = ""):
             return FileResponse(str(frontend_dist / "index.html"))
 
         _serving_frontend = True
-        log.info("frontend_static_serving_enabled", path=str(frontend_dist))
+        log.info("admin_dashboard_enabled", path=str(frontend_dist))
+
+    # ── Optional user app static serving (at /app) ──────────────
+    # User-facing app (auth, onboarding, search, chat) — the new React app.
+    app_dist = Path(__file__).parent.parent / "app" / "dist"
+
+    if app_dist.is_dir() and (app_dist / "index.html").exists():
+        app_assets = app_dist / "assets"
+        if app_assets.is_dir():
+            app.mount("/app/assets", StaticFiles(directory=str(app_assets)), name="app-assets")
+
+        @app.get("/app")
+        @app.get("/app/{rest_of_path:path}")
+        async def serve_user_app(rest_of_path: str = ""):
+            return FileResponse(str(app_dist / "index.html"))
+
+        log.info("user_app_enabled", path=str(app_dist))
 
     # ── Optional 3D visualization static serving ──────────────────
     viz_dist = Path(__file__).parent.parent / "viz" / "dist"
@@ -1708,7 +1724,7 @@ def create_app(
         projects="enabled" if project_manager else "disabled",
         events="enabled" if event_bus else "disabled",
         did=did_manager.did if did_manager else "disabled",
-        frontend="enabled" if _serving_frontend else "disabled",
+        admin="enabled" if _serving_frontend else "disabled",
     )
 
     return app
