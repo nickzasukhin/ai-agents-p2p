@@ -9,6 +9,7 @@ import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import { colors, spacing, fontSize, radius } from '../theme/tokens'
 import * as agent from '../api/agent'
+import { createAgent } from '../api/orchestrator'
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -39,7 +40,19 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
+  async function ensureAgent() {
+    // If no agent_token in localStorage, create/assign one via orchestrator
+    if (!localStorage.getItem('agent_token')) {
+      try {
+        await createAgent('My Agent')
+      } catch (err: any) {
+        console.warn('Agent assignment:', err.message)
+      }
+    }
+  }
+
   async function startInterview() {
+    await ensureAgent()
     try {
       const result = await agent.startOnboarding()
       setSessionId(result.session_id)

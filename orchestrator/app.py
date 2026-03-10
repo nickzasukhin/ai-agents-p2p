@@ -265,14 +265,43 @@ def create_orchestrator_app(
 
     @app.post("/agents/create")
     async def create_agent(req: CreateAgentRequest, request: Request):
-        """Spawn a new agent container for the current user."""
+        """Spawn a new agent container (or assign shared agent) for the current user."""
         user = await get_current_user(request)
 
         # Check if user already has an agent
         existing = await _db.get_agent_by_user(user["id"])
         if existing:
-            raise HTTPException(409, "You already have an agent. Delete it first to create a new one.")
+            # Return existing agent info instead of error
+            return {
+                "ok": True,
+                "agent_url": existing["agent_url"],
+                "api_token": existing["api_token"],
+                "status": existing["status"],
+                "instance_id": existing["id"],
+            }
 
+        # ── Shared agent mode ─────────────────────────────────
+        # When shared_agent_url is configured, all users share one agent.
+        # No Docker containers are spawned.
+        if config.shared_agent_url and config.shared_agent_token:
+            instance = await _db.create_agent_instance(
+                user_id=user["id"],
+                container_id="shared",
+                port=0,
+                api_token=config.shared_agent_token,
+                agent_url=config.shared_agent_url,
+                status="running",
+            )
+            log.info("agent_assigned_shared", user_id=user["id"], url=config.shared_agent_url)
+            return {
+                "ok": True,
+                "agent_url": config.shared_agent_url,
+                "api_token": config.shared_agent_token,
+                "status": "running",
+                "instance_id": instance["id"],
+            }
+
+        # ── Container mode ────────────────────────────────────
         # Check total agent count
         total = await _db.count_agents()
         if total >= config.max_agents:

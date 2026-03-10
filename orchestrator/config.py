@@ -40,6 +40,11 @@ class OrchestratorConfig(BaseSettings):
     nginx_conf_dir: str = "/etc/nginx/conf.d/agents"
     seed_node_url: str = "https://agents.devpunks.io"
 
+    # Shared agent mode — assign all users to one existing agent
+    # (used when not spawning individual containers)
+    shared_agent_url: str = ""   # e.g. "https://agents.devpunks.io"
+    shared_agent_token: str = "" # API token for the shared agent
+
     # Admin
     admin_emails: list[str] = []  # Emails with admin privileges
 
