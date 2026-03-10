@@ -51,6 +51,8 @@ services:
       ORCH_RESEND_API_KEY: ${ORCH_RESEND_API_KEY:-}
       ORCH_EMAIL_FROM: ${ORCH_EMAIL_FROM:-noreply@devpunks.io}
       ORCH_ADMIN_EMAILS: ${ORCH_ADMIN_EMAILS:-[]}
+      ORCH_SHARED_AGENT_URL: ${ORCH_SHARED_AGENT_URL:-}
+      ORCH_SHARED_AGENT_TOKEN: ${ORCH_SHARED_AGENT_TOKEN:-}
     ports:
       - "8002:8000"
     volumes:
