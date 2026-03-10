@@ -19,11 +19,13 @@ export function SearchResult({ agentName, description, skills, matchScore, sourc
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{ fontSize: fontSize.md, fontWeight: 600, margin: 0 }}>{agentName}</h3>
-          <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, margin: `${spacing.xs}px 0`, lineHeight: 1.5 }}>
-            {description.slice(0, 150)}{description.length > 150 ? '...' : ''}
-          </p>
+          {description && (
+            <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, margin: `${spacing.xs}px 0`, lineHeight: 1.5 }}>
+              {description.slice(0, 150)}{description.length > 150 ? '...' : ''}
+            </p>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }}>
-            {skills.slice(0, 4).map((s, i) => (
+            {(skills || []).slice(0, 4).map((s, i) => (
               <Badge key={i} variant="muted">{s.name}</Badge>
             ))}
             {source === 'registry' && <Badge variant="accent">Registry</Badge>}

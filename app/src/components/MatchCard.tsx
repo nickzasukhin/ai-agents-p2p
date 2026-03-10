@@ -36,9 +36,11 @@ export function MatchCard({
             <h3 style={{ fontSize: fontSize.lg, fontWeight: 600, margin: 0 }}>{agentName}</h3>
             {isMutual && <Badge variant="success">Mutual</Badge>}
           </div>
-          <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, margin: `${spacing.xs}px 0`, lineHeight: 1.5 }}>
-            {description.slice(0, 120)}{description.length > 120 ? '...' : ''}
-          </p>
+          {description && (
+            <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, margin: `${spacing.xs}px 0`, lineHeight: 1.5 }}>
+              {description.slice(0, 120)}{description.length > 120 ? '...' : ''}
+            </p>
+          )}
           {skills && (
             <p style={{ color: colors.textMuted, fontSize: fontSize.xs, margin: 0 }}>
               {skills.slice(0, 80)}{skills.length > 80 ? '...' : ''}
