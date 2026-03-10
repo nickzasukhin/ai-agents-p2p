@@ -112,6 +112,17 @@ def setup_discovery(
             if peer_clean != own_url.rstrip("/"):
                 registry.add(peer_clean)
 
+    # Phase 12.1: Inject seed nodes when no peers and no registries configured
+    if not config.skip_seeds and config.seed_nodes and len(registry) == 0:
+        seeds_added = 0
+        for seed_url in config.seed_nodes:
+            seed_clean = seed_url.rstrip("/")
+            if seed_clean != own_url.rstrip("/"):
+                registry.add(seed_clean)
+                seeds_added += 1
+        if seeds_added:
+            log.info("seed_nodes_injected", count=seeds_added, seeds=config.seed_nodes)
+
     has_registries = bool(registry_urls) or a2a_registry_enabled
     if len(registry) == 0 and not has_registries:
         log.info("no_peers_configured", msg="Discovery passive — no peers or registries")
@@ -276,6 +287,15 @@ def main():
         "--no-a2a-registry", action="store_true",
         help="Disable auto-registration on a2aregistry.org"
     )
+    # Phase 12.1: Seed Nodes
+    parser.add_argument(
+        "--seed-nodes", type=str, nargs="*", default=None,
+        help="Seed node URLs for cold-start bootstrap (overrides defaults)"
+    )
+    parser.add_argument(
+        "--no-seeds", action="store_true",
+        help="Disable seed node injection (for isolated testing)"
+    )
     args = parser.parse_args()
 
     config = AgentConfig()
@@ -307,6 +327,11 @@ def main():
         config.registry_urls = args.registry_url
     if args.no_a2a_registry:
         config.a2a_registry_enabled = False
+    # Phase 12.1: Seed Nodes
+    if args.seed_nodes is not None:
+        config.seed_nodes = args.seed_nodes
+    if args.no_seeds:
+        config.skip_seeds = True
 
     # Apply structured logging with proper level (Phase 6.6)
     configure_logging(config.log_level)

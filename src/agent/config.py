@@ -4,6 +4,11 @@ import os
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
+# Well-known seed nodes for cold-start bootstrap (Phase 12.1)
+DEFAULT_SEED_NODES: list[str] = [
+    "https://agents.devpunks.io",
+]
+
 
 class AgentConfig(BaseSettings):
     agent_name: str = "Agent-000"
@@ -14,6 +19,10 @@ class AgentConfig(BaseSettings):
     llm_provider: str = "openai"
     log_level: str = "info"
     peers: str = ""  # Comma-separated peer URLs (for Docker/K8s; CLI --peers takes priority)
+
+    # --- Seed Nodes (Phase 12.1) ---
+    seed_nodes: list[str] = DEFAULT_SEED_NODES  # Bootstrap seed URLs for cold-start
+    skip_seeds: bool = False  # Disable seed injection (for isolated testing)
 
     # --- NAT Traversal (Phase 6.3) ---
     public_url: str = ""          # Explicit public URL override (e.g. http://203.0.113.5:9000)
@@ -78,10 +87,10 @@ class AgentConfig(BaseSettings):
             raise ValueError(f"Parent directory not writable: {parent}")
         return v
 
-    @field_validator("registry_urls", mode="before")
+    @field_validator("registry_urls", "seed_nodes", mode="before")
     @classmethod
-    def parse_registry_urls(cls, v):
-        """Parse registry URLs from JSON array or comma-separated string."""
+    def parse_url_list(cls, v):
+        """Parse URL list from JSON array or comma-separated string."""
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("["):

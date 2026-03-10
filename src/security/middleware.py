@@ -25,6 +25,7 @@ OWNER_PATHS = [
     ("/projects", "POST"),            # create project
     ("/discovery/run", "POST"),       # trigger discovery
     ("/events/", "DELETE"),           # clear events
+    ("/peers/", "POST"),             # add peer by URL (Phase 12.1)
 ]
 
 # Paths that are always open (peer-facing / read-only)

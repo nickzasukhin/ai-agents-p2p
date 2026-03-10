@@ -1006,6 +1006,105 @@ def create_app(
         )
         return result
 
+    # ── Peer Management (Phase 12.1) ─────────────────────────────
+    @app.post("/peers/add")
+    async def add_peer(request: Request):
+        """Add a peer agent by URL — fetches card, verifies DID, runs matching.
+
+        Body: {"url": "https://some-agent.example.com"}
+        """
+        body, err = await _safe_json(request)
+        if err:
+            return err
+
+        peer_url = body.get("url", "").strip().rstrip("/")
+        if not peer_url:
+            return JSONResponse({"error": "Missing 'url' field"}, status_code=400)
+
+        # Reject adding self
+        if own_url and peer_url.rstrip("/") == own_url.rstrip("/"):
+            return JSONResponse({"error": "Cannot add self as peer"}, status_code=400)
+
+        # Validate URL format
+        if not peer_url.startswith("http://") and not peer_url.startswith("https://"):
+            return JSONResponse(
+                {"error": "Invalid URL — must start with http:// or https://"},
+                status_code=400,
+            )
+
+        # Fetch the agent's card
+        from src.a2a_client.client import A2AClient
+        client = A2AClient(
+            timeout=config.http_timeout if config else 10.0,
+            own_url=own_url or "",
+        )
+        try:
+            discovered = await client.discover_agents([peer_url])
+        except Exception as e:
+            log.warning("add_peer_fetch_failed", url=peer_url, error=str(e))
+            return JSONResponse(
+                {"error": f"Failed to fetch agent card from {peer_url}", "detail": str(e)},
+                status_code=502,
+            )
+
+        if not discovered:
+            return JSONResponse(
+                {"error": f"No agent card found at {peer_url}"},
+                status_code=404,
+            )
+
+        agent = discovered[0]
+
+        # Add to local static registry
+        if discovery_loop and discovery_loop.registry:
+            discovery_loop.registry.add(peer_url, name=agent.card.name if agent.card else None)
+            discovery_loop.registry.save()
+
+        # Run matching if discovery loop available
+        match_score = 0.0
+        if discovery_loop:
+            try:
+                matches = discovery_loop.get_matches()
+                # Trigger a discovery run to include the new peer
+                await discovery_loop.run_once()
+                matches = discovery_loop.get_matches()
+                for m in matches:
+                    if m.get("agent_url", "").rstrip("/") == peer_url.rstrip("/"):
+                        match_score = m.get("overall_score", 0.0)
+                        break
+            except Exception as e:
+                log.warning("add_peer_matching_error", error=str(e))
+
+        # Verify DID if available
+        did_verified = False
+        agent_did = ""
+        if agent.did:
+            agent_did = agent.did
+            did_verified = agent.verified
+
+        result = {
+            "status": "added",
+            "agent": {
+                "name": agent.card.name if agent.card else "Unknown",
+                "url": peer_url,
+                "did": agent_did,
+                "did_verified": did_verified,
+                "description": agent.card.description if agent.card else "",
+                "skills": [s.name for s in (agent.card.skills or [])] if agent.card else [],
+                "match_score": round(match_score, 4),
+            },
+        }
+
+        if event_bus:
+            event_bus.emit(EventType.AGENT_DISCOVERED, {
+                "agent_url": peer_url,
+                "agent_name": result["agent"]["name"],
+                "source": "manual_add",
+            })
+
+        log.info("peer_added", url=peer_url, name=result["agent"]["name"], match_score=match_score)
+        return result
+
     # ── Relay Endpoints (Phase 6.3) ────────────────────────────────
     if relay_store:
         @app.post("/relay/register")
