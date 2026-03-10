@@ -4,6 +4,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: a2a-agent
+    image: a2a-agent:latest
     environment:
       AGENT_NAME: ${AGENT_NAME:-Agent-DevPunks}
       PORT: "9000"
@@ -31,6 +32,42 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  orchestrator:
+    build:
+      context: ../..
+      dockerfile: orchestrator/Dockerfile
+    container_name: a2a-orchestrator
+    environment:
+      ORCH_HOST: "0.0.0.0"
+      ORCH_PORT: "8000"
+      ORCH_DB_PATH: /data/orchestrator.db
+      ORCH_JWT_SECRET: ${ORCH_JWT_SECRET:-change-me-in-production}
+      ORCH_AGENT_IMAGE: a2a-agent:latest
+      ORCH_AGENT_DATA_ROOT: /opt/agents/data
+      ORCH_DOMAIN: agents.devpunks.io
+      ORCH_BASE_URL: https://agents.devpunks.io
+      ORCH_NGINX_CONF_DIR: /etc/nginx/conf.d/agents
+      ORCH_SEED_NODE_URL: https://agents.devpunks.io
+      ORCH_RESEND_API_KEY: ${ORCH_RESEND_API_KEY:-}
+      ORCH_EMAIL_FROM: ${ORCH_EMAIL_FROM:-noreply@devpunks.io}
+      ORCH_ADMIN_EMAILS: ${ORCH_ADMIN_EMAILS:-[]}
+    ports:
+      - "8001:8000"
+    volumes:
+      - orchestrator-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/agents/data:/opt/agents/data
+      - /etc/nginx/conf.d/agents:/etc/nginx/conf.d/agents
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   registry:
     build:
       context: ../../registry
@@ -52,4 +89,5 @@ services:
 
 volumes:
   agent-data:
+  orchestrator-data:
   registry-data:

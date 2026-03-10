@@ -5,9 +5,11 @@
  */
 
 function getAgentBase(): string {
-  // In production, use the actual agent URL
+  // In production with orchestrator, use the assigned agent URL
   const agentUrl = localStorage.getItem('agent_url')
   if (agentUrl && !agentUrl.includes('localhost')) return agentUrl
+  // In production (same origin as agent) — empty string = same origin
+  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) return ''
   // In dev, use the vite proxy
   return '/agent'
 }

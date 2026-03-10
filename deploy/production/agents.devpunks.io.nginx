@@ -2,7 +2,17 @@ server {
     listen 80;
     server_name agents.devpunks.io;
 
-    # Frontend /api/* → backend /* (rewrite matches Vite dev proxy)
+    # Orchestrator API: /orch/* → orchestrator container
+    location /orch/ {
+        rewrite ^/orch/(.*) /$1 break;
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Frontend /api/* → agent backend /* (Vite dev proxy compat)
     location /api/ {
         rewrite ^/api/(.*) /$1 break;
         proxy_pass http://127.0.0.1:9100;
@@ -22,6 +32,7 @@ server {
         proxy_read_timeout 86400s;
     }
 
+    # Everything else → agent container (A2A, /admin, /app, /viz, etc.)
     location / {
         proxy_pass http://127.0.0.1:9100;
         proxy_set_header Host $host;
