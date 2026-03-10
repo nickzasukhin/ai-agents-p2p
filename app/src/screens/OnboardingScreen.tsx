@@ -185,8 +185,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <div style={{ marginBottom: spacing.md }}>
                 <div style={{ color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }}>Skills</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.xs }}>
-                  {(cardPreview.skills || []).map((s: string, i: number) => (
-                    <Badge key={i} variant="accent">{s}</Badge>
+                  {(cardPreview.skills || []).map((s: any, i: number) => (
+                    <Badge key={i} variant="accent">{typeof s === 'string' ? s : s.name || String(s)}</Badge>
                   ))}
                 </div>
               </div>
@@ -194,8 +194,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <div>
                 <div style={{ color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 1 }}>Looking For</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.xs }}>
-                  {(cardPreview.needs || []).map((n: string, i: number) => (
-                    <Badge key={i} variant="success">{n}</Badge>
+                  {(cardPreview.needs || []).map((n: any, i: number) => (
+                    <Badge key={i} variant="success">{typeof n === 'string' ? n : n.name || String(n)}</Badge>
                   ))}
                 </div>
               </div>
