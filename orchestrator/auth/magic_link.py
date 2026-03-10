@@ -110,8 +110,12 @@ class MagicLinkManager:
             return None
 
     def build_link(self, token: str) -> str:
-        """Build the full magic link URL."""
-        return f"{self.base_url}/auth/verify?token={token}"
+        """Build the full magic link URL.
+
+        Points to the user app (/app) which extracts the token
+        from the URL and calls the orchestrator verify API.
+        """
+        return f"{self.base_url}/app?token={token}"
 
 
 class SessionManager:
