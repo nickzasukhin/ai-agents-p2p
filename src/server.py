@@ -1261,6 +1261,109 @@ def create_app(
 </html>"""
         return HTMLResponse(content=html)
 
+    # ── Onboarding Interview (Phase 12.3) ────────────────────────
+    from src.onboarding.interview import OnboardingInterviewer
+
+    # Try to create LLM provider for onboarding
+    _onboarding_llm = None
+    if config and config.openai_api_key:
+        try:
+            from src.llm.factory import LLMFactory
+            _onboarding_llm = LLMFactory.create(
+                config.llm_provider, api_key=config.openai_api_key, model=config.openai_model
+            )
+        except Exception as e:
+            log.warning("onboarding_llm_init_failed", error=str(e))
+
+    _onboarding = OnboardingInterviewer(llm=_onboarding_llm)
+
+    @app.get("/onboarding/status")
+    async def onboarding_status():
+        """Check if the agent has been onboarded (has profile files)."""
+        if not data_dir:
+            return {"has_profile": False, "onboarding_complete": False}
+        ctx_dir = Path(data_dir) / "context"
+        has_profile = (ctx_dir / "profile.md").exists()
+        has_skills = (ctx_dir / "skills.md").exists()
+        return {
+            "has_profile": has_profile,
+            "has_skills": has_skills,
+            "onboarding_complete": has_profile and has_skills,
+        }
+
+    @app.post("/onboarding/start")
+    async def onboarding_start():
+        """Start a new onboarding interview session."""
+        result = await _onboarding.process_start()
+        return result
+
+    @app.post("/onboarding/chat")
+    async def onboarding_chat(request: Request):
+        """Send a message in the onboarding interview."""
+        body, err = await _safe_json(request)
+        if err:
+            return err
+
+        session_id = body.get("session_id", "")
+        message = body.get("message", "").strip()
+
+        if not session_id:
+            return JSONResponse({"error": "Missing session_id"}, status_code=400)
+        if not message:
+            return JSONResponse({"error": "Missing message"}, status_code=400)
+
+        result = await _onboarding.process_message(session_id, message)
+
+        if "error" in result:
+            return JSONResponse({"error": result["error"]}, status_code=404)
+
+        return result
+
+    @app.post("/onboarding/confirm")
+    async def onboarding_confirm(request: Request):
+        """Confirm the generated profile and write files."""
+        body, err = await _safe_json(request)
+        if err:
+            return err
+
+        session_id = body.get("session_id", "")
+        if not session_id:
+            return JSONResponse({"error": "Missing session_id"}, status_code=400)
+
+        result = await _onboarding.confirm(session_id)
+
+        if "error" in result:
+            return JSONResponse({"error": result["error"]}, status_code=400)
+
+        # Write generated files to context directory
+        if data_dir and result.get("files"):
+            ctx_dir = Path(data_dir) / "context"
+            ctx_dir.mkdir(parents=True, exist_ok=True)
+
+            files = result["files"]
+            for filename, content in files.items():
+                filepath = ctx_dir / filename.replace("_md", ".md").replace("_", ".")
+                # Map keys: profile_md → profile.md, skills_md → skills.md, needs_md → needs.md
+                if filename == "profile_md":
+                    filepath = ctx_dir / "profile.md"
+                elif filename == "skills_md":
+                    filepath = ctx_dir / "skills.md"
+                elif filename == "needs_md":
+                    filepath = ctx_dir / "needs.md"
+                filepath.write_text(content, encoding="utf-8")
+                log.info("onboarding_file_written", file=filepath.name)
+
+            # Rebuild agent card after writing context files
+            try:
+                rebuild_result = await rebuild_agent_card()
+                result["card_rebuilt"] = True
+                log.info("onboarding_card_rebuilt")
+            except Exception as e:
+                log.warning("onboarding_card_rebuild_failed", error=str(e))
+                result["card_rebuilt"] = False
+
+        return result
+
     # ── Relay Endpoints (Phase 6.3) ────────────────────────────────
     if relay_store:
         @app.post("/relay/register")
