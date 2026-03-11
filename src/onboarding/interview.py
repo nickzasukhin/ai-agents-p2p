@@ -165,6 +165,20 @@ class OnboardingInterviewer:
         # Record user message
         session.conversation.append({"role": "user", "content": user_message})
 
+        # Handle edit from REVIEW state — re-collect and re-generate
+        if session.state == OnboardingState.REVIEW:
+            session.collected_needs = user_message.strip()
+            session.state = OnboardingState.GENERATING
+            gen_result = await self._generate_profile(session)
+            session.state = OnboardingState.REVIEW
+            return {
+                "state": session.state.value,
+                "response": gen_result["response"],
+                "progress": _STATE_PROGRESS[session.state],
+                "card_preview": gen_result.get("card_preview"),
+                "files_preview": gen_result.get("files_preview"),
+            }
+
         # Advance state based on current position
         current_state = session.state
         next_state = _NEXT_STATE.get(current_state, current_state)

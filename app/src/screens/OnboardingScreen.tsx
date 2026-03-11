@@ -20,20 +20,40 @@ interface Message {
   isOwn: boolean
 }
 
+const OB_KEY = 'onboarding_state'
+
+function saveOnboarding(data: any) {
+  try { localStorage.setItem(OB_KEY, JSON.stringify(data)) } catch {}
+}
+function loadOnboarding(): any | null {
+  try { const s = localStorage.getItem(OB_KEY); return s ? JSON.parse(s) : null } catch { return null }
+}
+function clearOnboarding() {
+  try { localStorage.removeItem(OB_KEY) } catch {}
+}
+
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
-  const [step, setStep] = useState<'chat' | 'review' | 'go-online' | 'done'>('chat')
-  const [sessionId, setSessionId] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
+  const saved = loadOnboarding()
+  const [step, setStep] = useState<'chat' | 'review' | 'go-online' | 'done'>(saved?.step || 'chat')
+  const [sessionId, setSessionId] = useState(saved?.sessionId || '')
+  const [messages, setMessages] = useState<Message[]>(saved?.messages || [])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [cardPreview, setCardPreview] = useState<any>(null)
+  const [progress, setProgress] = useState(saved?.progress || 0)
+  const [cardPreview, setCardPreview] = useState<any>(saved?.cardPreview || null)
   const [goOnlineResult, setGoOnlineResult] = useState<any>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Start the interview on mount
+  // Persist onboarding state to localStorage on changes
   useEffect(() => {
-    startInterview()
+    if (sessionId) {
+      saveOnboarding({ step, sessionId, messages, progress, cardPreview })
+    }
+  }, [step, sessionId, messages, progress, cardPreview])
+
+  // Start the interview on mount (only if no saved session)
+  useEffect(() => {
+    if (!saved?.sessionId) startInterview()
   }, [])
 
   useEffect(() => {
@@ -278,7 +298,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 Public URL: <span style={{ color: colors.accent }}>{goOnlineResult.public_url}</span>
               </p>
             )}
-            <Button onClick={onComplete} style={{ fontSize: fontSize.lg, padding: '16px 48px' }}>
+            <Button onClick={() => { clearOnboarding(); onComplete() }} style={{ fontSize: fontSize.lg, padding: '16px 48px' }}>
               Enter Dashboard
             </Button>
           </div>
