@@ -9,8 +9,10 @@ import { HomeScreen } from './screens/HomeScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { ChatScreen } from './screens/ChatScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
+import { AgentDetailScreen } from './screens/AgentDetailScreen'
 import { isAuthenticated, getMe } from './api/orchestrator'
 import { getOnboardingStatus } from './api/agent'
+import { startNegotiation } from './api/agent'
 
 type AppState = 'loading' | 'auth' | 'onboarding' | 'main'
 type Tab = 'home' | 'search' | 'chat' | 'profile'
@@ -32,6 +34,7 @@ const TAB_LABELS: Record<Tab, string> = {
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [activeTab, setActiveTab] = useState<Tab>('home')
+  const [detailAgentUrl, setDetailAgentUrl] = useState<string | null>(null)
 
   useEffect(() => {
     checkAuth()
@@ -79,6 +82,31 @@ export default function App() {
     setAppState('auth')
   }
 
+  function handleViewAgent(agentUrl: string) {
+    setDetailAgentUrl(agentUrl)
+  }
+
+  function handleBackFromDetail() {
+    setDetailAgentUrl(null)
+  }
+
+  function handleTabClick(tab: Tab) {
+    setDetailAgentUrl(null)
+    setActiveTab(tab)
+  }
+
+  async function handleNegotiateFromDetail(peerUrl: string) {
+    try {
+      await startNegotiation(peerUrl)
+    } catch {}
+    setDetailAgentUrl(null)
+  }
+
+  function handleChatFromDetail(_peerUrl: string) {
+    setDetailAgentUrl(null)
+    setActiveTab('chat')
+  }
+
   // ── Loading ────────────────────────────────────────────
 
   if (appState === 'loading') {
@@ -123,14 +151,14 @@ export default function App() {
             {(['home', 'search', 'chat', 'profile'] as Tab[]).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabClick(tab)}
                 style={{
                   padding: `${spacing.xs}px ${spacing.md}px`,
                   borderRadius: radius.md,
                   fontSize: fontSize.sm,
                   fontWeight: 500,
-                  color: activeTab === tab ? colors.accent : colors.textSecondary,
-                  background: activeTab === tab ? colors.accentMuted : 'transparent',
+                  color: activeTab === tab && !detailAgentUrl ? colors.accent : colors.textSecondary,
+                  background: activeTab === tab && !detailAgentUrl ? colors.accentMuted : 'transparent',
                   transition: 'all 0.15s',
                 }}
               >
@@ -143,10 +171,21 @@ export default function App() {
 
       {/* Content */}
       <main style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'home' && <HomeScreen />}
-        {activeTab === 'search' && <SearchScreen />}
-        {activeTab === 'chat' && <ChatScreen />}
-        {activeTab === 'profile' && <ProfileScreen onLogout={handleLogout} />}
+        {detailAgentUrl ? (
+          <AgentDetailScreen
+            agentUrl={detailAgentUrl}
+            onBack={handleBackFromDetail}
+            onNegotiate={handleNegotiateFromDetail}
+            onChat={handleChatFromDetail}
+          />
+        ) : (
+          <>
+            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} />}
+            {activeTab === 'search' && <SearchScreen onViewAgent={handleViewAgent} />}
+            {activeTab === 'chat' && <ChatScreen />}
+            {activeTab === 'profile' && <ProfileScreen onLogout={handleLogout} />}
+          </>
+        )}
       </main>
 
       {/* Mobile bottom tab bar */}
@@ -162,12 +201,12 @@ export default function App() {
         {(['home', 'search', 'chat', 'profile'] as Tab[]).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabClick(tab)}
             style={{
               flex: 1,
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               padding: `${spacing.xs}px 0`,
-              color: activeTab === tab ? colors.accent : colors.textMuted,
+              color: activeTab === tab && !detailAgentUrl ? colors.accent : colors.textMuted,
               fontSize: fontSize.xs,
               gap: 2,
               transition: 'color 0.15s',

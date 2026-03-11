@@ -7,7 +7,11 @@ import { SearchResult as SearchResultCard } from '../components/SearchResult'
 import { colors, spacing, fontSize } from '../theme/tokens'
 import * as agentApi from '../api/agent'
 
-export function SearchScreen() {
+interface SearchScreenProps {
+  onViewAgent?: (agentUrl: string) => void
+}
+
+export function SearchScreen({ onViewAgent }: SearchScreenProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<agentApi.SearchResult[]>([])
   const [total, setTotal] = useState(0)
@@ -79,6 +83,7 @@ export function SearchScreen() {
                   skills={r.skills}
                   matchScore={r.match_score}
                   source={r.source}
+                  onClick={() => onViewAgent?.(r.agent_url)}
                 />
               ))}
             </div>

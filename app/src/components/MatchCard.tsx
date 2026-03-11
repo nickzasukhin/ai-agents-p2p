@@ -29,7 +29,7 @@ export function MatchCard({
   const scoreColor = scorePercent >= 70 ? colors.success : scorePercent >= 40 ? colors.warning : colors.textMuted
 
   return (
-    <Card hoverable>
+    <Card hoverable onClick={onView}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>

@@ -460,6 +460,79 @@ def create_app(
             ],
         }
 
+    @app.get("/discovery/agent")
+    async def get_agent_detail(url: str = ""):
+        """Get full details of a discovered agent by URL."""
+        if not url.strip():
+            return JSONResponse({"error": "url parameter required"}, status_code=400)
+
+        url = url.strip().rstrip("/")
+        agent = None
+
+        # Look up in discovered agents (O(1) dict lookup)
+        if discovery_loop:
+            agents_dict = discovery_loop.state.discovered_agents
+            agent = agents_dict.get(url) or agents_dict.get(url + "/")
+
+        # Fallback: live fetch from the agent URL
+        if not agent and discovery_loop:
+            try:
+                from src.a2a_client.client import A2AClient
+                client = A2AClient()
+                agent = await client.fetch_agent_card(url)
+            except Exception:
+                pass
+
+        if not agent:
+            return JSONResponse({"error": "Agent not found"}, status_code=404)
+
+        # Build response from agent card
+        card = agent.card
+        result = {
+            "agent_url": agent.url,
+            "agent_name": card.name or "",
+            "description": card.description or "",
+            "skills": [
+                {
+                    "id": s.id or "",
+                    "name": s.name or "",
+                    "description": s.description or "",
+                    "tags": list(s.tags) if s.tags else [],
+                }
+                for s in (card.skills or [])
+            ],
+            "did": agent.did or "",
+            "verified": agent.verified,
+            "version": card.version or "",
+            "provider": {
+                "organization": card.provider.organization if card.provider else "",
+                "url": card.provider.url if card.provider else "",
+            } if card.provider else None,
+            "match": None,
+        }
+
+        # Enrich with match data if available
+        if discovery_loop:
+            for m in discovery_loop.get_matches():
+                if m.agent_url.rstrip("/") == url:
+                    result["match"] = {
+                        "overall_score": round(m.overall_score, 4),
+                        "is_mutual": m.is_mutual,
+                        "score_breakdown": m.score_breakdown.to_dict() if m.score_breakdown else None,
+                        "skill_matches": [
+                            {
+                                "our_text": sm.our_text,
+                                "their_text": sm.their_text,
+                                "similarity": round(sm.similarity, 4),
+                                "direction": sm.direction,
+                            }
+                            for sm in m.skill_matches
+                        ],
+                    }
+                    break
+
+        return result
+
     @app.post("/discovery/run")
     async def run_discovery():
         if not discovery_loop:

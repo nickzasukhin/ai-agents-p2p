@@ -132,6 +132,45 @@ export async function searchAgents(query: string, limit: number = 20) {
   return agentRequest<SearchResponse>(`/search?q=${encodeURIComponent(query)}&limit=${limit}`)
 }
 
+// ── Agent Detail ─────────────────────────────────────────
+
+export interface AgentSkillDetail {
+  id: string
+  name: string
+  description: string
+  tags: string[]
+}
+
+export interface SkillMatch {
+  our_text: string
+  their_text: string
+  similarity: number
+  direction: string
+}
+
+export interface AgentMatchDetail {
+  overall_score: number
+  is_mutual: boolean
+  score_breakdown: Record<string, number> | null
+  skill_matches: SkillMatch[]
+}
+
+export interface AgentDetail {
+  agent_url: string
+  agent_name: string
+  description: string
+  skills: AgentSkillDetail[]
+  did: string
+  verified: boolean
+  version: string
+  provider: { organization: string; url: string } | null
+  match: AgentMatchDetail | null
+}
+
+export async function getAgentDetail(url: string) {
+  return agentRequest<AgentDetail>(`/discovery/agent?url=${encodeURIComponent(url)}`)
+}
+
 // ── Discovery/Matches ────────────────────────────────────
 
 export interface Match {

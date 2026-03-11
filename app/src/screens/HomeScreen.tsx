@@ -9,7 +9,11 @@ import { colors, spacing, fontSize } from '../theme/tokens'
 import * as agentApi from '../api/agent'
 import * as orchApi from '../api/orchestrator'
 
-export function HomeScreen() {
+interface HomeScreenProps {
+  onViewAgent?: (agentUrl: string) => void
+}
+
+export function HomeScreen({ onViewAgent }: HomeScreenProps) {
   const [matches, setMatches] = useState<agentApi.Match[]>([])
   const [onlineStatus, setOnlineStatus] = useState<agentApi.OnlineStatus | null>(null)
   const [agentInfo, setAgentInfo] = useState<orchApi.AgentInfo | null>(null)
@@ -130,6 +134,7 @@ export function HomeScreen() {
               skills={m.their_skills_text}
               isMutual={m.is_mutual}
               onNegotiate={() => handleNegotiate(m.agent_url)}
+              onView={() => onViewAgent?.(m.agent_url)}
             />
           ))}
         </div>
