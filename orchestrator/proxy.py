@@ -30,6 +30,25 @@ server {{
     ssl_certificate {ssl_cert_path};
     ssl_certificate_key {ssl_key_path};
 
+    # Public profile at root (exact match)
+    location = / {{
+        proxy_pass http://127.0.0.1:{port}/profile;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+
+    # Orchestrator API (auth, agent management)
+    location /orch/ {{
+        proxy_pass http://127.0.0.1:{orch_port}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+
+    # Everything else (agent API, SPA at /app, A2A, WebSocket)
     location / {{
         proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;
@@ -55,6 +74,25 @@ server {{
     listen 80;
     server_name {subdomain};
 
+    # Public profile at root (exact match)
+    location = / {{
+        proxy_pass http://127.0.0.1:{port}/profile;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+
+    # Orchestrator API (auth, agent management)
+    location /orch/ {{
+        proxy_pass http://127.0.0.1:{orch_port}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+
+    # Everything else (agent API, SPA at /app, A2A, WebSocket)
     location / {{
         proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;
@@ -85,11 +123,13 @@ class NginxProxy:
         domain: str = "agents.devpunks.io",
         ssl_cert_path: str = "",
         ssl_key_path: str = "",
+        orch_port: int = 8002,
     ):
         self.conf_dir = Path(conf_dir)
         self.domain = domain
         self.ssl_cert_path = ssl_cert_path
         self.ssl_key_path = ssl_key_path
+        self.orch_port = orch_port
 
     async def add_proxy(self, subdomain_prefix: str, port: int) -> str:
         """Add nginx proxy config for a user's agent.
@@ -110,6 +150,7 @@ class NginxProxy:
                 user_id=subdomain_prefix,
                 subdomain=subdomain,
                 port=port,
+                orch_port=self.orch_port,
                 ssl_cert_path=self.ssl_cert_path,
                 ssl_key_path=self.ssl_key_path,
             )
@@ -118,6 +159,7 @@ class NginxProxy:
                 user_id=subdomain_prefix,
                 subdomain=subdomain,
                 port=port,
+                orch_port=self.orch_port,
             )
 
         # Write config file

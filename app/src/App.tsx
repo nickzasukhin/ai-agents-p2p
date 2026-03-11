@@ -10,9 +10,44 @@ import { SearchScreen } from './screens/SearchScreen'
 import { ChatScreen } from './screens/ChatScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { AgentDetailScreen } from './screens/AgentDetailScreen'
-import { isAuthenticated, getMe } from './api/orchestrator'
+import { isAuthenticated, getMe, setSession } from './api/orchestrator'
 import { getOnboardingStatus } from './api/agent'
 import { startNegotiation } from './api/agent'
+
+/** Detect if we're on the main domain or a user subdomain. */
+const MAIN_DOMAIN = 'agents.devpunks.io'
+function isMainDomain(): boolean {
+  const host = window.location.hostname
+  return host === MAIN_DOMAIN || host === 'localhost' || host === '127.0.0.1'
+}
+
+function isSubdomain(): boolean {
+  const host = window.location.hostname
+  return host.endsWith(`.${MAIN_DOMAIN}`) && host !== MAIN_DOMAIN
+}
+
+/** Read URL params and store tokens in localStorage (used after redirect from main domain). */
+function consumeUrlTokens() {
+  const params = new URLSearchParams(window.location.search)
+  const session = params.get('session')
+  const agentToken = params.get('agent_token')
+  const agentUrl = params.get('agent_url')
+
+  if (session) {
+    setSession(session)
+    if (agentToken) localStorage.setItem('agent_token', agentToken)
+    if (agentUrl) localStorage.setItem('agent_url', agentUrl)
+
+    // Clean URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('session')
+    url.searchParams.delete('agent_token')
+    url.searchParams.delete('agent_url')
+    window.history.replaceState({}, '', url.pathname + url.hash)
+    return true
+  }
+  return false
+}
 
 type AppState = 'loading' | 'auth' | 'onboarding' | 'main'
 type Tab = 'home' | 'search' | 'chat' | 'profile'
@@ -37,15 +72,43 @@ export default function App() {
   const [detailAgentUrl, setDetailAgentUrl] = useState<string | null>(null)
 
   useEffect(() => {
+    // On subdomain, consume URL tokens from redirect first
+    if (isSubdomain()) {
+      consumeUrlTokens()
+    }
     checkAuth()
   }, [])
 
   async function checkAuth() {
     if (!isAuthenticated()) {
+      // On main domain, show auth. On subdomain without auth, also show auth.
       setAppState('auth')
       return
     }
 
+    // On main domain: if already authenticated, redirect to subdomain
+    if (isMainDomain()) {
+      try {
+        const user = await getMe()
+        if (user.subdomain) {
+          const token = localStorage.getItem('session_token') || ''
+          const agentToken = localStorage.getItem('agent_token') || ''
+          const agentUrl = localStorage.getItem('agent_url') || ''
+          const params = new URLSearchParams()
+          if (token) params.set('session', token)
+          if (agentToken) params.set('agent_token', agentToken)
+          if (agentUrl) params.set('agent_url', agentUrl)
+          window.location.href = `https://${user.subdomain}.${MAIN_DOMAIN}/app?${params.toString()}`
+          return
+        }
+      } catch {
+        // If can't reach API, show auth
+      }
+      setAppState('auth')
+      return
+    }
+
+    // On subdomain: normal flow
     try {
       const user = await getMe()
       if (!user.has_agent) {

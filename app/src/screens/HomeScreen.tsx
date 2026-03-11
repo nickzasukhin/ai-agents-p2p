@@ -97,9 +97,9 @@ export function HomeScreen({ onViewAgent }: HomeScreenProps) {
             {agentInfo?.status || 'unknown'}
           </Badge>
           {agentInfo?.agent_url && (
-            <div style={{ fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs, wordBreak: 'break-all', fontFamily: 'monospace' }}>
+            <a href={agentInfo.agent_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: fontSize.xs, color: colors.accent, marginTop: spacing.xs, wordBreak: 'break-all', fontFamily: 'monospace', textDecoration: 'none', display: 'block' }}>
               {agentInfo.agent_url.replace('https://', '')}
-            </div>
+            </a>
           )}
         </Card>
       </div>

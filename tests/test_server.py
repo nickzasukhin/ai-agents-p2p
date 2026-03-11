@@ -121,7 +121,7 @@ class TestIdentityEndpoint:
 
 class TestProfileEndpoint:
     async def test_get_profile(self, client):
-        resp = await client.get("/profile")
+        resp = await client.get("/profile/data")
         assert resp.status_code == 200
         data = resp.json()
         assert "files" in data

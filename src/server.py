@@ -300,9 +300,9 @@ def create_app(
     # ── Profile API (Phase 5.5) ─────────────────────────────────────
     PROFILE_FILES = ["profile.md", "skills.md", "needs.md"]
 
-    @app.get("/profile")
-    async def get_profile():
-        """Return the agent's profile files."""
+    @app.get("/profile/data")
+    async def get_profile_data():
+        """Return the agent's profile files (JSON API for admin)."""
         if not data_dir:
             return {"error": "Data directory not configured"}
         ctx_dir = Path(data_dir) / "context"
@@ -1518,6 +1518,265 @@ def create_app(
 </html>"""
         return HTMLResponse(content=html)
 
+    # ── Public Profile Page ─────────────────────────────────────
+    @app.get("/profile")
+    async def profile_page(request: Request):
+        """Render public profile page with context-aware action buttons."""
+        card = app.state.agent_card
+        agent_url = app.state.own_url
+        name = card.name or "AI Agent"
+        desc = card.description or "An AI agent on the DevPunks P2P network."
+        skills_list = card.skills or []
+        skills_text = ", ".join(s.name for s in skills_list[:5])
+        if len(skills_list) > 5:
+            skills_text += f" +{len(skills_list) - 5} more"
+        version = getattr(card, "version", None) or "1.0"
+        did_str = did_manager.did if did_manager else ""
+
+        # Context-aware buttons: check visitor's cookies
+        visitor_agent_url = request.cookies.get("agent_url", "")
+        visitor_has_token = bool(request.cookies.get("agent_token", ""))
+        is_owner = bool(visitor_agent_url and agent_url and visitor_agent_url.rstrip("/") == agent_url.rstrip("/"))
+        is_authenticated = bool(visitor_agent_url and visitor_has_token)
+
+        # Build skill tags HTML
+        skill_tags_html = ""
+        for s in skills_list[:8]:
+            skill_tags_html += (
+                f'<span style="display:inline-block;background:#1a1a2e;'
+                f'border:1px solid #E50051;border-radius:20px;padding:6px 14px;'
+                f'margin:4px;font-size:14px;color:#fff">{_esc(s.name)}</span>\n'
+            )
+
+        # Action buttons HTML
+        if is_owner:
+            action_html = f"""
+  <a class="action-btn primary" href="/app">Manage Agent &rarr;</a>
+  <a class="action-btn secondary" href="{_esc(agent_url)}/.well-known/agent-card.json" target="_blank">View Agent Card (JSON)</a>"""
+        elif is_authenticated:
+            action_html = f"""
+  <button class="action-btn primary" id="negotiate-btn" onclick="doNegotiate()">Negotiate</button>
+  <a class="action-btn secondary" href="{_esc(agent_url)}/.well-known/agent-card.json" target="_blank">View Agent Card (JSON)</a>
+  <div id="negotiate-result" style="margin-top:12px;font-size:14px;display:none"></div>"""
+        else:
+            action_html = f"""
+  <a class="action-btn primary" href="https://agents.devpunks.io">Sign up to connect</a>
+  <a class="action-btn secondary" href="{_esc(agent_url)}/.well-known/agent-card.json" target="_blank">View Agent Card (JSON)</a>"""
+
+        # Negotiate JS (only for authenticated non-owners)
+        negotiate_js = ""
+        if is_authenticated and not is_owner:
+            negotiate_js = f"""
+<script>
+async function doNegotiate() {{
+  var btn = document.getElementById('negotiate-btn');
+  var result = document.getElementById('negotiate-result');
+  btn.disabled = true;
+  btn.textContent = 'Negotiating...';
+  try {{
+    var agentUrl = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('agent_url='));
+    var agentToken = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('agent_token='));
+    if (!agentUrl || !agentToken) throw new Error('Not authenticated');
+    agentUrl = decodeURIComponent(agentUrl.split('=').slice(1).join('='));
+    agentToken = decodeURIComponent(agentToken.split('=').slice(1).join('='));
+    var resp = await fetch(agentUrl + '/negotiations/start-one', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + agentToken }},
+      body: JSON.stringify({{ peer_url: '{_esc(agent_url)}' }})
+    }});
+    var data = await resp.json();
+    if (resp.ok) {{
+      result.style.color = '#4ade80';
+      result.textContent = 'Negotiation started!';
+      btn.textContent = 'Negotiated \\u2713';
+    }} else {{
+      throw new Error(data.detail || 'Failed');
+    }}
+  }} catch(e) {{
+    result.style.color = '#E50051';
+    result.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Negotiate';
+  }}
+  result.style.display = 'block';
+}}
+</script>"""
+
+        og_title = f"{name} — DevPunks Agent Network"
+        og_desc = desc[:200] if len(desc) > 200 else desc
+        if skills_text:
+            og_desc = f"{og_desc} | Skills: {skills_text}"
+        og_desc = og_desc[:300]
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{_esc(og_title)}</title>
+
+<!-- Open Graph / Social Preview -->
+<meta property="og:type" content="profile">
+<meta property="og:title" content="{_esc(og_title)}">
+<meta property="og:description" content="{_esc(og_desc)}">
+<meta property="og:url" content="{_esc(agent_url)}">
+<meta property="og:site_name" content="DevPunks Agent Network">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{_esc(og_title)}">
+<meta name="twitter:description" content="{_esc(og_desc)}">
+
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    background: #0a0a0f;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }}
+  .card {{
+    background: #12121a;
+    border: 1px solid #1a1a2e;
+    border-radius: 16px;
+    max-width: 520px;
+    width: 100%;
+    padding: 40px 32px;
+    text-align: center;
+  }}
+  .logo {{
+    color: #E50051;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }}
+  .agent-avatar {{
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: rgba(229, 0, 81, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #E50051;
+    margin: 0 auto 16px;
+  }}
+  .agent-name {{
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }}
+  .description {{
+    color: #8888aa;
+    font-size: 16px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }}
+  .skills {{
+    margin-bottom: 24px;
+  }}
+  .section-label {{
+    color: #555570;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }}
+  .meta {{
+    display: grid;
+    gap: 8px;
+    margin-bottom: 28px;
+    text-align: left;
+  }}
+  .meta-row {{
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px solid #1a1a2e;
+  }}
+  .meta-label {{ color: #555570; }}
+  .meta-value {{ color: #8888aa; font-family: monospace; word-break: break-all; max-width: 60%; text-align: right; }}
+  .actions {{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+  }}
+  .action-btn {{
+    display: inline-block;
+    padding: 14px 36px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s, opacity 0.2s;
+  }}
+  .action-btn.primary {{
+    background: #E50051;
+    color: #fff;
+  }}
+  .action-btn.primary:hover {{ background: #FF1A6C; }}
+  .action-btn.primary:disabled {{ opacity: 0.6; cursor: not-allowed; }}
+  .action-btn.secondary {{
+    background: transparent;
+    color: #8888aa;
+    border: 1px solid #1a1a2e;
+  }}
+  .action-btn.secondary:hover {{ border-color: #E50051; color: #fff; }}
+  .url {{
+    color: #555570;
+    font-size: 12px;
+    margin-top: 16px;
+    word-break: break-all;
+  }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">DevPunks Agent Network</div>
+  <div class="agent-avatar">{_esc(name[0]) if name else '?'}</div>
+  <h1 class="agent-name">{_esc(name)}</h1>
+  <p class="description">{_esc(desc)}</p>
+
+  <div class="skills">
+    <div class="section-label">Skills</div>
+    {skill_tags_html if skill_tags_html else '<span style="color:#555570">No skills listed</span>'}
+  </div>
+
+  <div class="meta">
+    <div class="meta-row">
+      <span class="meta-label">Version</span>
+      <span class="meta-value">{_esc(version)}</span>
+    </div>
+    {f'<div class="meta-row"><span class="meta-label">DID</span><span class="meta-value">{_esc(did_str[:32])}...</span></div>' if did_str else ''}
+    <div class="meta-row">
+      <span class="meta-label">Agent URL</span>
+      <span class="meta-value">{_esc(agent_url)}</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    {action_html}
+  </div>
+
+  <div class="url">Powered by DevPunks P2P Agent Network</div>
+</div>
+{negotiate_js}
+</body>
+</html>"""
+        return HTMLResponse(content=html)
+
     # ── Onboarding Interview (Phase 12.3) ────────────────────────
     from src.onboarding.interview import OnboardingInterviewer
 
@@ -1749,28 +2008,24 @@ def create_app(
         _serving_frontend = True
         log.info("admin_dashboard_enabled", path=str(frontend_dist))
 
-    # ── User app static serving (at root /) ──────────────────────
+    # ── User app static serving (at /app) ──────────────────────
     # User-facing app (auth, onboarding, search, chat) — the React SPA.
-    # Served at root / so agents.devpunks.io shows the app directly.
+    # On main domain (agents.devpunks.io): auth only → redirect to subdomain.
+    # On subdomain ({user}.agents.devpunks.io): full dashboard at /app.
     app_dist = Path(__file__).parent.parent / "app" / "dist"
 
     if app_dist.is_dir() and (app_dist / "index.html").exists():
         app_assets = app_dist / "assets"
         if app_assets.is_dir():
-            app.mount("/assets", StaticFiles(directory=str(app_assets)), name="app-assets")
+            app.mount("/app/assets", StaticFiles(directory=str(app_assets)), name="app-assets")
 
-        @app.get("/")
-        async def serve_user_app_root():
-            """Serve user app at root URL."""
-            return FileResponse(str(app_dist / "index.html"))
-
-        # Backward compatibility: redirect /app to /
         @app.get("/app")
         @app.get("/app/{rest_of_path:path}")
-        async def serve_user_app_redirect(rest_of_path: str = ""):
-            return RedirectResponse(url="/", status_code=301)
+        async def serve_user_app(rest_of_path: str = ""):
+            """Serve user app SPA at /app path."""
+            return FileResponse(str(app_dist / "index.html"))
 
-        log.info("user_app_enabled", path=str(app_dist), route="/")
+        log.info("user_app_enabled", path=str(app_dist), route="/app")
 
     # ── Optional 3D visualization static serving ──────────────────
     viz_dist = Path(__file__).parent.parent / "viz" / "dist"

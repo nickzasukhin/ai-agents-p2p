@@ -137,7 +137,13 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: colors.textMuted, fontSize: fontSize.sm }}>Agent URL</span>
-            <span style={{ fontSize: fontSize.sm, color: colors.accent }}>{userInfo?.agent_url || '—'}</span>
+            {userInfo?.agent_url ? (
+              <a href={userInfo.agent_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: fontSize.sm, color: colors.accent, textDecoration: 'none' }}>
+                {userInfo.agent_url.replace('https://', '')}
+              </a>
+            ) : (
+              <span style={{ fontSize: fontSize.sm, color: colors.textMuted }}>—</span>
+            )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: colors.textMuted, fontSize: fontSize.sm }}>Status</span>

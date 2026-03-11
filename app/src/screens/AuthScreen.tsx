@@ -24,9 +24,24 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   // If there's a token, verify it immediately
   if (token && !sent) {
     verifyMagicLink(token)
-      .then(() => {
+      .then((result) => {
         // Clear URL params
         window.history.replaceState({}, '', window.location.pathname)
+
+        // If user has a subdomain, redirect to their dashboard
+        const MAIN_DOMAIN = 'agents.devpunks.io'
+        if (result.subdomain && window.location.hostname === MAIN_DOMAIN) {
+          const redirectParams = new URLSearchParams()
+          redirectParams.set('session', result.session_token)
+          if (result.agent_url) {
+            redirectParams.set('agent_url', result.agent_url)
+            const agentToken = localStorage.getItem('agent_token')
+            if (agentToken) redirectParams.set('agent_token', agentToken)
+          }
+          window.location.href = `https://${result.subdomain}.${MAIN_DOMAIN}/app?${redirectParams.toString()}`
+          return
+        }
+
         onAuth()
       })
       .catch((e) => setError(e.message))

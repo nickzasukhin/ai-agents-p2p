@@ -118,7 +118,7 @@ export async function rejectNegotiation(id: string) {
 // ── Profile & Identity ──────────────────────────────────────
 
 export async function fetchProfile() {
-  return apiFetch('/profile')
+  return apiFetch('/profile/data')
 }
 
 export async function updateProfileFile(filename: string, content: string) {

@@ -26,6 +26,7 @@ function headers(): Record<string, string> {
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const resp = await fetch(`${BASE}${path}`, {
     ...opts,
+    credentials: 'include',
     headers: { ...headers(), ...(opts.headers as Record<string, string> || {}) },
   })
   if (resp.status === 401) {
@@ -52,6 +53,7 @@ export interface VerifyResult {
   session_token: string
   user_id: string
   email: string
+  subdomain: string | null
   is_new_user: boolean
   has_agent: boolean
   agent_url: string | null
@@ -72,6 +74,7 @@ export async function verifyMagicLink(token: string): Promise<VerifyResult> {
 export interface UserInfo {
   user_id: string
   email: string
+  subdomain?: string
   created_at: string
   has_agent: boolean
   agent_url?: string

@@ -115,6 +115,7 @@ def create_orchestrator_app(
         domain=config.domain,
         ssl_cert_path=config.ssl_cert_path,
         ssl_key_path=config.ssl_key_path,
+        orch_port=config.port,
     )
 
     # ── Lifecycle ─────────────────────────────────────────────
@@ -244,8 +245,10 @@ def create_orchestrator_app(
 
         log.info("auth_verified", email=email, is_new=is_new, has_agent=agent is not None)
 
-        # Return JSON with session token (frontend handles cookie/storage)
-        return {
+        # Build JSON response + set cross-domain cookies
+        agent_url = agent["agent_url"] if agent else ""
+        agent_token = agent["api_token"] if agent else ""
+        data = {
             "ok": True,
             "session_token": session_token,
             "user_id": user["id"],
@@ -253,8 +256,20 @@ def create_orchestrator_app(
             "subdomain": user.get("subdomain"),
             "is_new_user": is_new,
             "has_agent": agent is not None,
-            "agent_url": agent["agent_url"] if agent else None,
+            "agent_url": agent_url or None,
         }
+
+        # Set cookies scoped to parent domain (accessible from all subdomains)
+        cookie_domain = f".{config.domain}" if config.domain else None
+        max_age = 86400 * 7  # 7 days
+        json_response = JSONResponse(content=data)
+        json_response.set_cookie("session", session_token, domain=cookie_domain, httponly=True, secure=True, samesite="lax", max_age=max_age)
+        if agent_url:
+            json_response.set_cookie("agent_url", agent_url, domain=cookie_domain, httponly=False, secure=True, samesite="lax", max_age=max_age)
+        if agent_token:
+            json_response.set_cookie("agent_token", agent_token, domain=cookie_domain, httponly=False, secure=True, samesite="lax", max_age=max_age)
+
+        return json_response
 
     @app.get("/auth/me")
     async def get_me(request: Request):
@@ -279,11 +294,27 @@ def create_orchestrator_app(
 
     @app.post("/auth/logout")
     async def logout(response: Response):
-        """Clear session."""
-        response.delete_cookie("session")
+        """Clear session and agent cookies."""
+        cookie_domain = f".{config.domain}" if config.domain else None
+        response.delete_cookie("session", domain=cookie_domain)
+        response.delete_cookie("agent_url", domain=cookie_domain)
+        response.delete_cookie("agent_token", domain=cookie_domain)
         return {"ok": True, "message": "Logged out"}
 
     # ── Agent Endpoints ───────────────────────────────────────
+
+    def _agent_response(data: dict) -> JSONResponse:
+        """Wrap agent response with agent_url/agent_token cookies."""
+        resp = JSONResponse(content=data)
+        cookie_domain = f".{config.domain}" if config.domain else None
+        max_age = 86400 * 7
+        agent_url = data.get("agent_url", "")
+        api_token = data.get("api_token", "")
+        if agent_url:
+            resp.set_cookie("agent_url", agent_url, domain=cookie_domain, httponly=False, secure=True, samesite="lax", max_age=max_age)
+        if api_token:
+            resp.set_cookie("agent_token", api_token, domain=cookie_domain, httponly=False, secure=True, samesite="lax", max_age=max_age)
+        return resp
 
     @app.post("/agents/create")
     async def create_agent(req: CreateAgentRequest, request: Request):
@@ -294,13 +325,13 @@ def create_orchestrator_app(
         existing = await _db.get_agent_by_user(user["id"])
         if existing:
             # Return existing agent info instead of error
-            return {
+            return _agent_response({
                 "ok": True,
                 "agent_url": existing["agent_url"],
                 "api_token": existing["api_token"],
                 "status": existing["status"],
                 "instance_id": existing["id"],
-            }
+            })
 
         # ── Shared agent mode ─────────────────────────────────
         # When shared_agent_url is configured, all users share one agent.
@@ -315,13 +346,13 @@ def create_orchestrator_app(
                 status="running",
             )
             log.info("agent_assigned_shared", user_id=user["id"], url=config.shared_agent_url)
-            return {
+            return _agent_response({
                 "ok": True,
                 "agent_url": config.shared_agent_url,
                 "api_token": config.shared_agent_token,
                 "status": "running",
                 "instance_id": instance["id"],
-            }
+            })
 
         # ── Container mode ────────────────────────────────────
         # Check total agent count (exclude shared-mode records)
@@ -383,13 +414,13 @@ def create_orchestrator_app(
 
             log.info("agent_created", user_id=user["id"], url=result["agent_url"], ready=agent_ready)
 
-            return {
+            return _agent_response({
                 "ok": True,
                 "agent_url": result["agent_url"],
                 "api_token": result["api_token"],
                 "status": "running" if agent_ready else "starting",
                 "instance_id": instance["id"],
-            }
+            })
 
         except RuntimeError as e:
             raise HTTPException(503, str(e))

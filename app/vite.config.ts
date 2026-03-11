@@ -7,7 +7,7 @@ const ORCH_TARGET = process.env.VITE_ORCH_TARGET || 'http://localhost:8000'
 const AGENT_TARGET = process.env.VITE_AGENT_TARGET || 'http://localhost:9000'
 
 export default defineConfig({
-  base: '/',
+  base: '/app/',
   plugins: [react()],
   server: {
     host: '127.0.0.1',
