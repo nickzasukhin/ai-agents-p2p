@@ -82,9 +82,34 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       if (result.state === 'review' && result.card_preview) {
         setCardPreview(result.card_preview)
         setStep('review')
+      } else if (result.state === 'confirmed' || result.progress >= 0.9) {
+        // Auto-advance: profile is ready
+        if (result.card_preview) {
+          setCardPreview(result.card_preview)
+          setStep('review')
+        } else {
+          try { await agent.confirmOnboarding(sessionId) } catch {}
+          setStep('go-online')
+        }
       }
     } catch (err: any) {
       setMessages((prev) => [...prev, { content: `Error: ${err.message}`, isOwn: false }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleNext() {
+    setLoading(true)
+    try {
+      if (cardPreview) {
+        setStep('review')
+      } else {
+        try { await agent.confirmOnboarding(sessionId) } catch {}
+        setStep('go-online')
+      }
+    } catch {
+      setStep('go-online')
     } finally {
       setLoading(false)
     }
@@ -115,6 +140,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       setLoading(false)
     }
   }
+
+  const showNext = progress >= 0.9 && !input.trim() && !loading
 
   return (
     <div style={{
@@ -164,11 +191,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               value={input}
               onChange={setInput}
               placeholder="Type your answer..."
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              onKeyDown={(e) => e.key === 'Enter' && (showNext ? handleNext() : handleSend())}
               autoFocus
             />
-            <Button onClick={handleSend} disabled={!input.trim() || loading} small>
-              Send
+            <Button
+              onClick={showNext ? handleNext : handleSend}
+              disabled={!showNext && (!input.trim() || loading)}
+              small
+            >
+              {loading ? '...' : showNext ? 'Next' : 'Send'}
             </Button>
           </div>
         </>
