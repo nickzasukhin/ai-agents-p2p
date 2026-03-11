@@ -5,17 +5,24 @@
  */
 
 function getAgentBase(): string {
+  // On user subdomain (e.g. yennefer.agents.devpunks.io) — agent is same origin
+  const host = typeof window !== 'undefined' ? window.location.hostname : ''
+  if (host.endsWith('.agents.devpunks.io')) return ''
+  // In production (same origin as agent) — empty string = same origin
+  if (host && !host.includes('localhost')) return ''
   // In production with orchestrator, use the assigned agent URL
   const agentUrl = localStorage.getItem('agent_url')
   if (agentUrl && !agentUrl.includes('localhost')) return agentUrl
-  // In production (same origin as agent) — empty string = same origin
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) return ''
   // In dev, use the vite proxy
   return '/agent'
 }
 
 function getAgentToken(): string | null {
-  return localStorage.getItem('agent_token')
+  // Try localStorage first, then cookie (set by orchestrator across subdomains)
+  const stored = localStorage.getItem('agent_token')
+  if (stored) return stored
+  const match = document.cookie.match(/(?:^|;\s*)agent_token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function headers(): Record<string, string> {
