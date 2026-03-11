@@ -37,6 +37,7 @@ from orchestrator.auth.email import EmailSender
 from orchestrator.containers.manager import ContainerManager
 from orchestrator.containers.port_allocator import PortAllocator
 from orchestrator.proxy import NginxProxy
+from orchestrator.names import generate_subdomain
 
 structlog.configure(
     processors=[
@@ -227,8 +228,11 @@ def create_orchestrator_app(
         is_new = user is None
 
         if is_new:
-            user = await _db.create_user(email)
-            log.info("new_user_created", email=email, user_id=user["id"])
+            # Generate unique fun subdomain (e.g. "gandalf", "morpheus")
+            taken = await _db.get_all_subdomains()
+            subdomain = generate_subdomain(taken)
+            user = await _db.create_user(email, subdomain=subdomain)
+            log.info("new_user_created", email=email, user_id=user["id"], subdomain=subdomain)
         else:
             await _db.update_last_login(user["id"])
 
@@ -246,6 +250,7 @@ def create_orchestrator_app(
             "session_token": session_token,
             "user_id": user["id"],
             "email": email,
+            "subdomain": user.get("subdomain"),
             "is_new_user": is_new,
             "has_agent": agent is not None,
             "agent_url": agent["agent_url"] if agent else None,
@@ -260,6 +265,7 @@ def create_orchestrator_app(
         result = {
             "user_id": user["id"],
             "email": user["email"],
+            "subdomain": user.get("subdomain"),
             "created_at": user["created_at"],
             "has_agent": agent is not None,
         }
@@ -328,15 +334,17 @@ def create_orchestrator_app(
         used_ports = {a["port"] for a in all_agents if a["port"]}
 
         try:
-            # Spawn container
+            # Spawn container (use fun subdomain like "gandalf")
+            subdomain = user.get("subdomain") or user["id"]
             result = await containers.spawn_agent(
                 user_id=user["id"],
+                subdomain=subdomain,
                 agent_name=req.agent_name,
                 used_ports=used_ports,
             )
 
             # Update nginx proxy
-            await proxy.add_proxy(user["id"], result["port"])
+            await proxy.add_proxy(subdomain, result["port"])
 
             # Wait for container to become healthy (up to 30s)
             agent_ready = False
@@ -424,7 +432,8 @@ def create_orchestrator_app(
         if agent.get("container_id") and agent["container_id"] != "shared":
             await containers.stop_agent(agent["container_id"])
             # Remove nginx proxy only for real containers
-            await proxy.remove_proxy(user["id"])
+            subdomain = user.get("subdomain") or user["id"]
+            await proxy.remove_proxy(subdomain)
 
         # Remove from DB
         await _db.delete_agent_instance(agent["id"])

@@ -32,6 +32,7 @@ class OrchestratorDB:
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
+                subdomain TEXT UNIQUE,
                 created_at TEXT NOT NULL,
                 last_login TEXT
             );
@@ -68,16 +69,22 @@ class OrchestratorDB:
 
     # ── Users ─────────────────────────────────────────────────
 
-    async def create_user(self, email: str) -> dict:
-        """Create a new user. Returns user dict."""
+    async def create_user(self, email: str, subdomain: str | None = None) -> dict:
+        """Create a new user with optional subdomain. Returns user dict."""
         user_id = str(uuid.uuid4())
         now = _now()
         await self._db.execute(
-            "INSERT INTO users (id, email, created_at, last_login) VALUES (?, ?, ?, ?)",
-            (user_id, email.lower().strip(), now, now),
+            "INSERT INTO users (id, email, subdomain, created_at, last_login) VALUES (?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), subdomain, now, now),
         )
         await self._db.commit()
-        return {"id": user_id, "email": email.lower().strip(), "created_at": now, "last_login": now}
+        return {
+            "id": user_id,
+            "email": email.lower().strip(),
+            "subdomain": subdomain,
+            "created_at": now,
+            "last_login": now,
+        }
 
     async def get_user_by_email(self, email: str) -> dict | None:
         """Find user by email."""
@@ -104,6 +111,22 @@ class OrchestratorDB:
         cursor = await self._db.execute("SELECT COUNT(*) FROM users")
         row = await cursor.fetchone()
         return row[0]
+
+    async def get_all_subdomains(self) -> set[str]:
+        """Get all taken subdomains for uniqueness checking."""
+        cursor = await self._db.execute(
+            "SELECT subdomain FROM users WHERE subdomain IS NOT NULL"
+        )
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}
+
+    async def get_user_by_subdomain(self, subdomain: str) -> dict | None:
+        """Find user by subdomain."""
+        cursor = await self._db.execute(
+            "SELECT * FROM users WHERE subdomain = ?", (subdomain,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
     # ── Agent Instances ───────────────────────────────────────
 

@@ -56,6 +56,7 @@ class ContainerManager:
     async def spawn_agent(
         self,
         user_id: str,
+        subdomain: str | None = None,
         agent_name: str = "Agent",
         used_ports: set[int] | None = None,
     ) -> dict:
@@ -63,6 +64,7 @@ class ContainerManager:
 
         Args:
             user_id: Unique user identifier.
+            subdomain: Fun subdomain prefix (e.g. "gandalf"). Falls back to user_id.
             agent_name: Display name for the agent.
             used_ports: Set of currently used ports (from DB).
 
@@ -70,6 +72,7 @@ class ContainerManager:
             Dict with container info: {container_id, port, api_token, agent_url, status}.
         """
         used = used_ports or set()
+        sub = subdomain or user_id
 
         # 1. Allocate port
         port = self.ports.allocate(used)
@@ -85,12 +88,13 @@ class ContainerManager:
         # 3. Generate API token
         api_token = secrets.token_urlsafe(32)
 
-        # 4. Build agent URL
-        agent_url = f"https://{user_id}.{self.domain}"
+        # 4. Build agent URL (use fun subdomain)
+        agent_url = f"https://{sub}.{self.domain}"
 
         # 5. Run container
         container_id = await self._run_container(
             user_id=user_id,
+            subdomain=sub,
             port=port,
             data_dir=str(data_dir),
             api_token=api_token,
@@ -101,6 +105,7 @@ class ContainerManager:
         log.info(
             "agent_spawned",
             user_id=user_id,
+            subdomain=sub,
             port=port,
             container_id=container_id[:12] if container_id else None,
             url=agent_url,
@@ -117,6 +122,7 @@ class ContainerManager:
     async def _run_container(
         self,
         user_id: str,
+        subdomain: str,
         port: int,
         data_dir: str,
         api_token: str,
@@ -145,7 +151,7 @@ class ContainerManager:
             container = docker.containers.run(
                 self.agent_image,
                 detach=True,
-                name=f"agent-{user_id}",
+                name=f"agent-{subdomain}",
                 environment=env,
                 ports={"9000/tcp": port, "10000/udp": port + 1000},
                 volumes={data_dir: {"bind": "/data", "mode": "rw"}},

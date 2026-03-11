@@ -13,6 +13,55 @@ from orchestrator.containers.port_allocator import PortAllocator
 from orchestrator.containers.manager import ContainerManager
 from orchestrator.proxy import NginxProxy
 from orchestrator.app import create_orchestrator_app
+from orchestrator.names import generate_subdomain, CHARACTERS
+
+
+# ── Unit Tests: SubdomainGenerator ────────────────────────────
+
+class TestSubdomainGenerator:
+    def test_generate_returns_character_name(self):
+        """Generated subdomain should be from the CHARACTERS list."""
+        name = generate_subdomain()
+        assert name in CHARACTERS
+
+    def test_generate_avoids_taken(self):
+        """Should not return a name that is already taken."""
+        taken = set(CHARACTERS[:50])
+        name = generate_subdomain(taken)
+        assert name not in taken
+        assert name in CHARACTERS
+
+    def test_generate_unique_names(self):
+        """Multiple calls should produce different names (probabilistic)."""
+        names = {generate_subdomain() for _ in range(20)}
+        # With 200+ characters, 20 calls should produce at least a few unique
+        assert len(names) >= 5
+
+    def test_generate_fallback_with_number(self):
+        """When all names are taken, should append a number."""
+        taken = set(CHARACTERS)
+        name = generate_subdomain(taken)
+        assert name not in CHARACTERS
+        # Should be like "gandalf-42"
+        assert "-" in name
+        base, num = name.rsplit("-", 1)
+        assert base in CHARACTERS
+        assert num.isdigit()
+
+    def test_characters_are_url_safe(self):
+        """All character names should be valid URL subdomains."""
+        import re
+        url_safe = re.compile(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$")
+        for name in CHARACTERS:
+            assert url_safe.match(name), f"'{name}' is not URL-safe"
+
+    def test_no_duplicate_characters(self):
+        """CHARACTERS list should have no duplicates."""
+        assert len(CHARACTERS) == len(set(CHARACTERS))
+
+    def test_sufficient_pool_size(self):
+        """Should have at least 200 character names."""
+        assert len(CHARACTERS) >= 200
 
 
 # ── Unit Tests: MagicLinkManager ──────────────────────────────
@@ -305,6 +354,30 @@ class TestOrchestratorDB:
         await db.create_agent_instance(user_id=user["id"], status="running")
         assert await db.count_agents() == 1
 
+    async def test_create_user_with_subdomain(self, db):
+        """Should store subdomain on user creation."""
+        user = await db.create_user("test@example.com", subdomain="gandalf")
+        assert user["subdomain"] == "gandalf"
+
+        # Retrieve and verify
+        found = await db.get_user_by_email("test@example.com")
+        assert found["subdomain"] == "gandalf"
+
+    async def test_get_all_subdomains(self, db):
+        """Should return all taken subdomains."""
+        await db.create_user("a@b.com", subdomain="gandalf")
+        await db.create_user("c@d.com", subdomain="morpheus")
+        await db.create_user("e@f.com")  # no subdomain
+
+        taken = await db.get_all_subdomains()
+        assert taken == {"gandalf", "morpheus"}
+
+    async def test_subdomain_uniqueness(self, db):
+        """Duplicate subdomains should be rejected by DB."""
+        await db.create_user("a@b.com", subdomain="gandalf")
+        with pytest.raises(Exception):
+            await db.create_user("c@d.com", subdomain="gandalf")
+
 
 # ── Unit Tests: EmailSender ───────────────────────────────────
 
@@ -538,12 +611,13 @@ def mock_container_manager(tmp_path):
     """Mock container manager that doesn't need Docker."""
     mgr = MagicMock(spec=ContainerManager)
 
-    async def mock_spawn(user_id, agent_name="Agent", used_ports=None):
+    async def mock_spawn(user_id, subdomain=None, agent_name="Agent", used_ports=None):
+        sub = subdomain or user_id
         return {
-            "container_id": f"mock-container-{user_id}",
+            "container_id": f"mock-container-{sub}",
             "port": 9100,
             "api_token": "mock-api-token-xyz",
-            "agent_url": f"https://{user_id}.agents.test.io",
+            "agent_url": f"https://{sub}.agents.test.io",
             "status": "starting",
         }
 

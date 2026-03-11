@@ -91,23 +91,23 @@ class NginxProxy:
         self.ssl_cert_path = ssl_cert_path
         self.ssl_key_path = ssl_key_path
 
-    async def add_proxy(self, user_id: str, port: int) -> str:
+    async def add_proxy(self, subdomain_prefix: str, port: int) -> str:
         """Add nginx proxy config for a user's agent.
 
         Args:
-            user_id: User identifier (used as subdomain prefix).
+            subdomain_prefix: Subdomain name (e.g. "gandalf", "morpheus").
             port: Local port the agent container is listening on.
 
         Returns:
-            The subdomain URL.
+            The full subdomain URL.
         """
-        subdomain = f"{user_id}.{self.domain}"
-        conf_path = self.conf_dir / f"{user_id}.conf"
+        subdomain = f"{subdomain_prefix}.{self.domain}"
+        conf_path = self.conf_dir / f"{subdomain_prefix}.conf"
 
         # Use SSL template if cert paths are configured
         if self.ssl_cert_path and self.ssl_key_path:
             config = NGINX_TEMPLATE_SSL.format(
-                user_id=user_id,
+                user_id=subdomain_prefix,
                 subdomain=subdomain,
                 port=port,
                 ssl_cert_path=self.ssl_cert_path,
@@ -115,7 +115,7 @@ class NginxProxy:
             )
         else:
             config = NGINX_TEMPLATE_HTTP.format(
-                user_id=user_id,
+                user_id=subdomain_prefix,
                 subdomain=subdomain,
                 port=port,
             )
@@ -124,20 +124,20 @@ class NginxProxy:
         self.conf_dir.mkdir(parents=True, exist_ok=True)
         conf_path.write_text(config)
 
-        log.info("nginx_config_written", user_id=user_id, path=str(conf_path))
+        log.info("nginx_config_written", subdomain=subdomain_prefix, path=str(conf_path))
 
         # Reload nginx
         await self._reload_nginx()
 
         return f"https://{subdomain}"
 
-    async def remove_proxy(self, user_id: str) -> None:
+    async def remove_proxy(self, subdomain_prefix: str) -> None:
         """Remove nginx proxy config for a user's agent."""
-        conf_path = self.conf_dir / f"{user_id}.conf"
+        conf_path = self.conf_dir / f"{subdomain_prefix}.conf"
 
         if conf_path.exists():
             conf_path.unlink()
-            log.info("nginx_config_removed", user_id=user_id)
+            log.info("nginx_config_removed", subdomain=subdomain_prefix)
             await self._reload_nginx()
 
     async def _reload_nginx(self) -> bool:
@@ -163,6 +163,6 @@ class NginxProxy:
             log.error("nginx_reload_error", error=str(e))
             return False
 
-    def get_subdomain(self, user_id: str) -> str:
-        """Get the subdomain URL for a user."""
-        return f"https://{user_id}.{self.domain}"
+    def get_subdomain(self, subdomain_prefix: str) -> str:
+        """Get the full subdomain URL."""
+        return f"https://{subdomain_prefix}.{self.domain}"
