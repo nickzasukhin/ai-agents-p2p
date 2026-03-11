@@ -188,6 +188,33 @@ class ContainerManager:
             log.error("stop_agent_error", error=str(e))
             return False
 
+    async def get_container_ip(self, container_id: str) -> str | None:
+        """Get the container's IP address on the Docker bridge network.
+
+        This is needed because the orchestrator runs inside Docker and can't
+        reach host-mapped ports via 127.0.0.1. Instead, we use the container's
+        internal IP on the bridge network.
+        """
+        try:
+            docker = self._get_docker()
+
+            def _get_ip():
+                container = docker.containers.get(container_id)
+                networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
+                # Try bridge network first, then any available network
+                for net_name in ("bridge", *networks.keys()):
+                    if net_name in networks:
+                        ip = networks[net_name].get("IPAddress")
+                        if ip:
+                            return ip
+                return None
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, _get_ip)
+        except Exception as e:
+            log.warning("get_container_ip_failed", error=str(e))
+            return None
+
     async def health_check(self, container_id: str) -> dict:
         """Check health of an agent container."""
         try:

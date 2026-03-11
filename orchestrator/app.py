@@ -347,8 +347,15 @@ def create_orchestrator_app(
             await proxy.add_proxy(subdomain, result["port"])
 
             # Wait for container to become healthy (up to 30s)
+            # Use container's bridge IP since orchestrator runs inside Docker
+            # and can't reach host-mapped ports via 127.0.0.1
             agent_ready = False
-            health_url = f"http://127.0.0.1:{result['port']}/health"
+            container_ip = await containers.get_container_ip(result["container_id"])
+            if container_ip:
+                health_url = f"http://{container_ip}:9000/health"
+            else:
+                health_url = f"http://127.0.0.1:{result['port']}/health"
+            log.info("agent_health_check_url", url=health_url, container_ip=container_ip)
             for attempt in range(15):
                 await asyncio.sleep(2)
                 try:
@@ -359,7 +366,7 @@ def create_orchestrator_app(
                             break
                 except Exception:
                     pass
-                log.debug("agent_health_wait", attempt=attempt + 1, port=result["port"])
+                log.debug("agent_health_wait", attempt=attempt + 1, url=health_url)
 
             if not agent_ready:
                 log.warning("agent_not_ready_after_timeout", port=result["port"])
@@ -404,6 +411,11 @@ def create_orchestrator_app(
         if agent.get("container_id") and agent["container_id"] != "shared":
             try:
                 health = await containers.health_check(agent["container_id"])
+                # Auto-update status if container is actually healthy
+                if health.get("running") and agent["status"] != "running":
+                    await _db.update_agent_status(agent["id"], "running")
+                    agent = {**agent, "status": "running"}
+                    log.info("agent_status_auto_updated", instance_id=agent["id"])
             except Exception:
                 pass
         elif agent.get("container_id") == "shared":
