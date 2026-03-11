@@ -284,26 +284,29 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         </div>
       )}
 
-      {step === 'done' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
-          <div style={{ textAlign: 'center', animation: 'slideUp 0.3s ease' }}>
-            <div style={{ fontSize: 64, marginBottom: spacing.lg }}>🎉</div>
-            <h2 style={{ fontSize: fontSize.xxl, marginBottom: spacing.sm }}>You're all set!</h2>
-            <p style={{ color: colors.textSecondary, fontSize: fontSize.md, marginBottom: spacing.md }}>
-              Your agent is ready.
-              {goOnlineResult?.status === 'online' && ' Connected to the network.'}
-            </p>
-            {goOnlineResult?.public_url && (
-              <p style={{ color: colors.textMuted, fontSize: fontSize.sm, marginBottom: spacing.xl }}>
-                Public URL: <span style={{ color: colors.accent }}>{goOnlineResult.public_url}</span>
+      {step === 'done' && (() => {
+        const agentUrl = goOnlineResult?.public_url || localStorage.getItem('agent_url') || ''
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+            <div style={{ textAlign: 'center', animation: 'slideUp 0.3s ease' }}>
+              <div style={{ fontSize: 64, marginBottom: spacing.lg }}>🎉</div>
+              <h2 style={{ fontSize: fontSize.xxl, marginBottom: spacing.sm }}>You're all set!</h2>
+              <p style={{ color: colors.textSecondary, fontSize: fontSize.md, marginBottom: spacing.md }}>
+                Your agent is ready.
+                {goOnlineResult?.status === 'online' && ' Connected to the network.'}
               </p>
-            )}
-            <Button onClick={() => { clearOnboarding(); onComplete() }} style={{ fontSize: fontSize.lg, padding: '16px 48px' }}>
-              Enter Dashboard
-            </Button>
+              {agentUrl && (
+                <p style={{ color: colors.textMuted, fontSize: fontSize.sm, marginBottom: spacing.xl }}>
+                  Your agent: <span style={{ color: colors.accent, fontFamily: 'monospace', wordBreak: 'break-all' }}>{agentUrl}</span>
+                </p>
+              )}
+              <Button onClick={() => { clearOnboarding(); onComplete() }} style={{ fontSize: fontSize.lg, padding: '16px 48px' }}>
+                Enter Dashboard
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

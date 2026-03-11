@@ -51,8 +51,15 @@ services:
       ORCH_RESEND_API_KEY: ${ORCH_RESEND_API_KEY:-}
       ORCH_EMAIL_FROM: ${ORCH_EMAIL_FROM:-noreply@devpunks.io}
       ORCH_ADMIN_EMAILS: ${ORCH_ADMIN_EMAILS:-[]}
-      ORCH_SHARED_AGENT_URL: ${ORCH_SHARED_AGENT_URL:-}
-      ORCH_SHARED_AGENT_TOKEN: ${ORCH_SHARED_AGENT_TOKEN:-}
+      ORCH_PORT_RANGE_START: "9101"
+      # Agent container env vars (passed to spawned containers)
+      ORCH_AGENT_OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ORCH_AGENT_OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      ORCH_AGENT_LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      ORCH_AGENT_REGISTRY_URLS: '["https://registry.devpunks.io"]'
+      # SSL (wildcard cert for *.agents.devpunks.io)
+      ORCH_SSL_CERT_PATH: /etc/letsencrypt/live/agents.devpunks.io/fullchain.pem
+      ORCH_SSL_KEY_PATH: /etc/letsencrypt/live/agents.devpunks.io/privkey.pem
     ports:
       - "8002:8000"
     volumes:
@@ -60,6 +67,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/agents/data:/opt/agents/data
       - /etc/nginx/conf.d/agents:/etc/nginx/conf.d/agents
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       agent:
         condition: service_healthy

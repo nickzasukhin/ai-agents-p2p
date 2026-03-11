@@ -335,11 +335,10 @@ class TestEmailSender:
 # ── Unit Tests: NginxProxy ────────────────────────────────────
 
 class TestNginxProxy:
-    async def test_add_proxy_writes_config(self, tmp_path):
-        """Should write nginx config file."""
+    async def test_add_proxy_writes_http_config(self, tmp_path):
+        """Should write HTTP-only nginx config when no SSL certs."""
         proxy = NginxProxy(conf_dir=str(tmp_path / "nginx"), domain="agents.test.io")
 
-        # Mock nginx reload
         with patch.object(proxy, "_reload_nginx", new_callable=AsyncMock) as mock_reload:
             mock_reload.return_value = True
             url = await proxy.add_proxy("user-123", 9100)
@@ -350,9 +349,33 @@ class TestNginxProxy:
         assert conf_file.exists()
         content = conf_file.read_text()
         assert "user-123.agents.test.io" in content
-        assert "localhost:9100" in content
+        assert "127.0.0.1:9100" in content
         assert "proxy_pass" in content
-        assert "Upgrade" in content  # WebSocket support
+        assert "Upgrade" in content
+        assert "ssl_certificate" not in content  # No SSL in HTTP mode
+
+    async def test_add_proxy_writes_ssl_config(self, tmp_path):
+        """Should write SSL nginx config when cert paths provided."""
+        proxy = NginxProxy(
+            conf_dir=str(tmp_path / "nginx"),
+            domain="agents.test.io",
+            ssl_cert_path="/etc/letsencrypt/live/agents.test.io/fullchain.pem",
+            ssl_key_path="/etc/letsencrypt/live/agents.test.io/privkey.pem",
+        )
+
+        with patch.object(proxy, "_reload_nginx", new_callable=AsyncMock) as mock_reload:
+            mock_reload.return_value = True
+            url = await proxy.add_proxy("user-456", 9101)
+
+        assert url == "https://user-456.agents.test.io"
+
+        conf_file = tmp_path / "nginx" / "user-456.conf"
+        content = conf_file.read_text()
+        assert "listen 443 ssl" in content
+        assert "ssl_certificate /etc/letsencrypt/live/agents.test.io/fullchain.pem" in content
+        assert "ssl_certificate_key /etc/letsencrypt/live/agents.test.io/privkey.pem" in content
+        assert "127.0.0.1:9101" in content
+        assert "return 301 https://" in content  # HTTP→HTTPS redirect
 
     async def test_remove_proxy(self, tmp_path):
         """Should remove nginx config file."""
@@ -431,6 +454,40 @@ class TestContainerManager:
         assert result["status"] == "running"
         assert result["running"] is True
         assert result["health"] == "healthy"
+
+    async def test_spawn_agent_with_extra_env(self, tmp_path):
+        """Should pass extra env vars to container."""
+        mock_docker = MagicMock()
+        mock_container = MagicMock()
+        mock_container.id = "container-extra-env"
+        mock_docker.containers.run.return_value = mock_container
+
+        extra_env = {
+            "OPENAI_API_KEY": "sk-test-key",
+            "OPENAI_MODEL": "gpt-4o-mini",
+            "LLM_PROVIDER": "openai",
+        }
+
+        mgr = ContainerManager(
+            agent_image="test-image",
+            data_root=str(tmp_path / "agents"),
+            docker_client=mock_docker,
+            domain="agents.test.io",
+            extra_env=extra_env,
+        )
+
+        await mgr.spawn_agent(user_id="user-env", used_ports=set())
+
+        # Verify docker was called with extra env merged
+        call_kwargs = mock_docker.containers.run.call_args
+        container_env = call_kwargs[1]["environment"] if "environment" in call_kwargs[1] else call_kwargs[0][1] if len(call_kwargs[0]) > 1 else {}
+        # Check via the positional/keyword args
+        run_call = mock_docker.containers.run.call_args
+        env = run_call.kwargs.get("environment", {})
+        assert env["OPENAI_API_KEY"] == "sk-test-key"
+        assert env["OPENAI_MODEL"] == "gpt-4o-mini"
+        assert env["LLM_PROVIDER"] == "openai"
+        assert env["AGENT_NAME"] == "Agent"  # Default name still present
 
     async def test_stop_agent(self):
         """Should stop and remove container."""
@@ -684,16 +741,30 @@ class TestAuthFlow:
         assert resp.json()["ok"] is True
 
 
+def _mock_httpx_health_ok():
+    """Create a mock for httpx.AsyncClient that returns 200 on health check."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    return patch("orchestrator.app.httpx.AsyncClient", return_value=mock_client)
+
+
 class TestAgentManagement:
     async def test_create_agent(self, orch_client, orch_app, mock_container_manager):
         """POST /agents/create should spawn container."""
         session = await _get_session_token(orch_client, orch_app)
 
-        resp = await orch_client.post(
-            "/agents/create",
-            json={"agent_name": "My Test Agent"},
-            headers={"Authorization": f"Bearer {session}"},
-        )
+        with _mock_httpx_health_ok():
+            resp = await orch_client.post(
+                "/agents/create",
+                json={"agent_name": "My Test Agent"},
+                headers={"Authorization": f"Bearer {session}"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
@@ -704,16 +775,20 @@ class TestAgentManagement:
         mock_container_manager.spawn_agent.assert_called_once()
 
     async def test_create_agent_duplicate(self, orch_client, orch_app):
-        """Should reject creating second agent."""
+        """Should return existing agent on duplicate create."""
         session = await _get_session_token(orch_client, orch_app)
         headers = {"Authorization": f"Bearer {session}"}
 
         # Create first
-        await orch_client.post("/agents/create", json={}, headers=headers)
+        with _mock_httpx_health_ok():
+            await orch_client.post("/agents/create", json={}, headers=headers)
 
-        # Try second — should fail
+        # Try second — returns existing agent info (not error)
         resp = await orch_client.post("/agents/create", json={}, headers=headers)
-        assert resp.status_code == 409
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["agent_url"]
 
     async def test_create_agent_no_auth(self, orch_client):
         """Should reject unauthenticated agent creation."""
@@ -730,7 +805,8 @@ class TestAgentManagement:
         assert resp.json()["has_agent"] is False
 
         # Create one
-        await orch_client.post("/agents/create", json={}, headers=headers)
+        with _mock_httpx_health_ok():
+            await orch_client.post("/agents/create", json={}, headers=headers)
 
         # Now has agent
         resp = await orch_client.get("/agents/mine", headers=headers)
@@ -745,7 +821,8 @@ class TestAgentManagement:
         headers = {"Authorization": f"Bearer {session}"}
 
         # Create then delete
-        await orch_client.post("/agents/create", json={}, headers=headers)
+        with _mock_httpx_health_ok():
+            await orch_client.post("/agents/create", json={}, headers=headers)
         resp = await orch_client.delete("/agents/mine", headers=headers)
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
@@ -796,9 +873,10 @@ class TestAdminEndpoints:
 
         # Create a user + agent first
         user_session = await _get_session_token(orch_client, orch_app, "worker@test.com")
-        await orch_client.post(
-            "/agents/create", json={}, headers={"Authorization": f"Bearer {user_session}"}
-        )
+        with _mock_httpx_health_ok():
+            await orch_client.post(
+                "/agents/create", json={}, headers={"Authorization": f"Bearer {user_session}"}
+            )
 
         # Get the agent instance ID
         agents_resp = await orch_client.get("/admin/agents", headers=admin_headers)
@@ -821,9 +899,10 @@ class TestAdminEndpoints:
 
         # Create a user + agent first
         user_session = await _get_session_token(orch_client, orch_app, "worker2@test.com")
-        await orch_client.post(
-            "/agents/create", json={}, headers={"Authorization": f"Bearer {user_session}"}
-        )
+        with _mock_httpx_health_ok():
+            await orch_client.post(
+                "/agents/create", json={}, headers={"Authorization": f"Bearer {user_session}"}
+            )
 
         # Get instance ID
         agents_resp = await orch_client.get("/admin/agents", headers=admin_headers)

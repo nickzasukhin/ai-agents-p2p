@@ -45,6 +45,16 @@ class OrchestratorConfig(BaseSettings):
     shared_agent_url: str = ""   # e.g. "https://agents.devpunks.io"
     shared_agent_token: str = "" # API token for the shared agent
 
+    # Agent container environment (passed to spawned containers)
+    agent_openai_api_key: str = ""
+    agent_openai_model: str = "gpt-4o-mini"
+    agent_llm_provider: str = "openai"
+    agent_registry_urls: str = '["https://registry.devpunks.io"]'
+
+    # SSL (for nginx proxy template — wildcard cert)
+    ssl_cert_path: str = "/etc/letsencrypt/live/agents.devpunks.io/fullchain.pem"
+    ssl_key_path: str = "/etc/letsencrypt/live/agents.devpunks.io/privkey.pem"
+
     # Admin
     admin_emails: list[str] = []  # Emails with admin privileges
 

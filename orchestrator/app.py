@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 import asyncio
 
+import httpx
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -91,14 +92,29 @@ def create_orchestrator_app(
         enabled=config.email_enabled,
     )
     port_allocator = PortAllocator(start=config.port_range_start, end=config.port_range_end)
+
+    # Build extra env vars for spawned agent containers
+    extra_env: dict[str, str] = {}
+    if config.agent_openai_api_key:
+        extra_env["OPENAI_API_KEY"] = config.agent_openai_api_key
+        extra_env["OPENAI_MODEL"] = config.agent_openai_model
+        extra_env["LLM_PROVIDER"] = config.agent_llm_provider
+        extra_env["REGISTRY_URLS"] = config.agent_registry_urls
+
     containers = container_manager or ContainerManager(
         agent_image=config.agent_image,
         data_root=config.agent_data_root,
         port_allocator=port_allocator,
         seed_node_url=config.seed_node_url,
         domain=config.domain,
+        extra_env=extra_env,
     )
-    proxy = nginx_proxy or NginxProxy(conf_dir=config.nginx_conf_dir, domain=config.domain)
+    proxy = nginx_proxy or NginxProxy(
+        conf_dir=config.nginx_conf_dir,
+        domain=config.domain,
+        ssl_cert_path=config.ssl_cert_path,
+        ssl_key_path=config.ssl_key_path,
+    )
 
     # ── Lifecycle ─────────────────────────────────────────────
 
@@ -302,13 +318,13 @@ def create_orchestrator_app(
             }
 
         # ── Container mode ────────────────────────────────────
-        # Check total agent count
-        total = await _db.count_agents()
-        if total >= config.max_agents:
+        # Check total agent count (exclude shared-mode records)
+        all_agents = await _db.list_all_agents()
+        real_agents = [a for a in all_agents if a.get("container_id") != "shared"]
+        if len(real_agents) >= config.max_agents:
             raise HTTPException(503, "Maximum number of agents reached. Please try again later.")
 
         # Get used ports
-        all_agents = await _db.list_all_agents()
         used_ports = {a["port"] for a in all_agents if a["port"]}
 
         try:
@@ -322,6 +338,24 @@ def create_orchestrator_app(
             # Update nginx proxy
             await proxy.add_proxy(user["id"], result["port"])
 
+            # Wait for container to become healthy (up to 30s)
+            agent_ready = False
+            health_url = f"http://127.0.0.1:{result['port']}/health"
+            for attempt in range(15):
+                await asyncio.sleep(2)
+                try:
+                    async with httpx.AsyncClient(timeout=3) as client:
+                        resp = await client.get(health_url)
+                        if resp.status_code == 200:
+                            agent_ready = True
+                            break
+                except Exception:
+                    pass
+                log.debug("agent_health_wait", attempt=attempt + 1, port=result["port"])
+
+            if not agent_ready:
+                log.warning("agent_not_ready_after_timeout", port=result["port"])
+
             # Store in DB
             instance = await _db.create_agent_instance(
                 user_id=user["id"],
@@ -329,16 +363,16 @@ def create_orchestrator_app(
                 port=result["port"],
                 api_token=result["api_token"],
                 agent_url=result["agent_url"],
-                status="running",
+                status="running" if agent_ready else "starting",
             )
 
-            log.info("agent_created", user_id=user["id"], url=result["agent_url"])
+            log.info("agent_created", user_id=user["id"], url=result["agent_url"], ready=agent_ready)
 
             return {
                 "ok": True,
                 "agent_url": result["agent_url"],
                 "api_token": result["api_token"],
-                "status": "running",
+                "status": "running" if agent_ready else "starting",
                 "instance_id": instance["id"],
             }
 
@@ -357,13 +391,15 @@ def create_orchestrator_app(
         if not agent:
             return {"has_agent": False}
 
-        # Check container health
+        # Check container health (skip for shared-mode records)
         health = {"status": "unknown", "running": False}
-        if agent.get("container_id"):
+        if agent.get("container_id") and agent["container_id"] != "shared":
             try:
                 health = await containers.health_check(agent["container_id"])
             except Exception:
                 pass
+        elif agent.get("container_id") == "shared":
+            health = {"status": "running", "running": True, "health": "shared"}
 
         return {
             "has_agent": True,
@@ -384,12 +420,11 @@ def create_orchestrator_app(
         if not agent:
             raise HTTPException(404, "No agent found")
 
-        # Stop container
-        if agent.get("container_id"):
+        # Stop container (skip for shared-mode records)
+        if agent.get("container_id") and agent["container_id"] != "shared":
             await containers.stop_agent(agent["container_id"])
-
-        # Remove nginx proxy
-        await proxy.remove_proxy(user["id"])
+            # Remove nginx proxy only for real containers
+            await proxy.remove_proxy(user["id"])
 
         # Remove from DB
         await _db.delete_agent_instance(agent["id"])

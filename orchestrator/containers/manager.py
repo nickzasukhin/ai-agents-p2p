@@ -32,6 +32,7 @@ class ContainerManager:
         seed_node_url: str = "https://agents.devpunks.io",
         domain: str = "agents.devpunks.io",
         docker_client=None,
+        extra_env: dict[str, str] | None = None,
     ):
         self.agent_image = agent_image
         self.data_root = Path(data_root)
@@ -39,6 +40,7 @@ class ContainerManager:
         self.seed_node_url = seed_node_url
         self.domain = domain
         self._docker = docker_client  # Lazy init
+        self.extra_env = extra_env or {}
 
     def _get_docker(self):
         """Lazy-initialize Docker client."""
@@ -134,6 +136,9 @@ class ContainerManager:
             "LOG_LEVEL": "info",
             "A2A_REGISTRY_ENABLED": "true",
         }
+        # Merge extra env vars (OPENAI_API_KEY, LLM_PROVIDER, etc.)
+        if self.extra_env:
+            env.update(self.extra_env)
 
         # Run in event loop executor to avoid blocking
         def _run():
