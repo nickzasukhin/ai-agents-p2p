@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
 
@@ -1749,21 +1749,28 @@ def create_app(
         _serving_frontend = True
         log.info("admin_dashboard_enabled", path=str(frontend_dist))
 
-    # ── Optional user app static serving (at /app) ──────────────
-    # User-facing app (auth, onboarding, search, chat) — the new React app.
+    # ── User app static serving (at root /) ──────────────────────
+    # User-facing app (auth, onboarding, search, chat) — the React SPA.
+    # Served at root / so agents.devpunks.io shows the app directly.
     app_dist = Path(__file__).parent.parent / "app" / "dist"
 
     if app_dist.is_dir() and (app_dist / "index.html").exists():
         app_assets = app_dist / "assets"
         if app_assets.is_dir():
-            app.mount("/app/assets", StaticFiles(directory=str(app_assets)), name="app-assets")
+            app.mount("/assets", StaticFiles(directory=str(app_assets)), name="app-assets")
 
-        @app.get("/app")
-        @app.get("/app/{rest_of_path:path}")
-        async def serve_user_app(rest_of_path: str = ""):
+        @app.get("/")
+        async def serve_user_app_root():
+            """Serve user app at root URL."""
             return FileResponse(str(app_dist / "index.html"))
 
-        log.info("user_app_enabled", path=str(app_dist))
+        # Backward compatibility: redirect /app to /
+        @app.get("/app")
+        @app.get("/app/{rest_of_path:path}")
+        async def serve_user_app_redirect(rest_of_path: str = ""):
+            return RedirectResponse(url="/", status_code=301)
+
+        log.info("user_app_enabled", path=str(app_dist), route="/")
 
     # ── Optional 3D visualization static serving ──────────────────
     viz_dist = Path(__file__).parent.parent / "viz" / "dist"

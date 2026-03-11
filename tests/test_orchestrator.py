@@ -75,7 +75,7 @@ class TestMagicLinkManager:
         token, _ = mgr.create_token("user@example.com")
         link = mgr.build_link(token)
 
-        assert link.startswith("https://agents.devpunks.io/app?token=")
+        assert link.startswith("https://agents.devpunks.io/?token=")
         assert token in link
 
     def test_email_normalized(self):
