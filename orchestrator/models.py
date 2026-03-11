@@ -32,7 +32,7 @@ class OrchestratorDB:
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
-                subdomain TEXT UNIQUE,
+                subdomain TEXT,
                 created_at TEXT NOT NULL,
                 last_login TEXT
             );
@@ -59,7 +59,17 @@ class OrchestratorDB:
             CREATE INDEX IF NOT EXISTS idx_agent_user ON agent_instances(user_id);
             CREATE INDEX IF NOT EXISTS idx_magic_email ON magic_links(email);
             CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_subdomain
+                ON users(subdomain) WHERE subdomain IS NOT NULL;
         """)
+
+        # Migration: add subdomain column if upgrading from older schema
+        try:
+            await self._db.execute("SELECT subdomain FROM users LIMIT 1")
+        except Exception:
+            await self._db.execute("ALTER TABLE users ADD COLUMN subdomain TEXT")
+            log.info("db_migration_added_subdomain_column")
+
         await self._db.commit()
         log.info("orchestrator_db_initialized", path=self.db_path)
 
