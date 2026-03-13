@@ -33,6 +33,7 @@ class ContainerManager:
         domain: str = "agents.devpunks.io",
         docker_client=None,
         extra_env: dict[str, str] | None = None,
+        orch_network: str = "",
     ):
         self.agent_image = agent_image
         self.data_root = Path(data_root)
@@ -41,6 +42,7 @@ class ContainerManager:
         self.domain = domain
         self._docker = docker_client  # Lazy init
         self.extra_env = extra_env or {}
+        self.orch_network = orch_network  # Docker network to join for health checks
 
     def _get_docker(self):
         """Lazy-initialize Docker client."""
@@ -147,6 +149,8 @@ class ContainerManager:
             env.update(self.extra_env)
 
         # Run in event loop executor to avoid blocking
+        orch_network = self.orch_network
+
         def _run():
             container = docker.containers.run(
                 self.agent_image,
@@ -160,6 +164,16 @@ class ContainerManager:
                 cpu_period=100000,
                 cpu_quota=50000,  # 50% of one CPU
             )
+            # Connect to orchestrator network so health checks work
+            if orch_network:
+                try:
+                    net = docker.networks.get(orch_network)
+                    net.connect(container)
+                    log.info("container_joined_network", network=orch_network,
+                             container=container.name)
+                except Exception as e:
+                    log.warning("network_connect_failed", network=orch_network,
+                                error=str(e))
             return container.id
 
         loop = asyncio.get_event_loop()

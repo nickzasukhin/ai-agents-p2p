@@ -19,7 +19,6 @@ Endpoints:
 
 from __future__ import annotations
 
-import os
 import re
 import asyncio
 
@@ -110,6 +109,7 @@ def create_orchestrator_app(
         seed_node_url=config.seed_node_url,
         domain=config.domain,
         extra_env=extra_env,
+        orch_network=config.docker_network,
     )
     proxy = nginx_proxy or NginxProxy(
         conf_dir=config.nginx_conf_dir,
@@ -379,10 +379,10 @@ def create_orchestrator_app(
             await proxy.add_proxy(subdomain, result["port"])
 
             # Wait for container to become healthy (up to 30s)
-            # Use host.docker.internal to reach host-mapped ports from compose network
+            # Use container name on shared network (port 9000 = internal port)
             agent_ready = False
-            health_host = os.environ.get("HEALTH_CHECK_HOST", "host.docker.internal")
-            health_url = f"http://{health_host}:{result['port']}/health"
+            container_name = f"agent-{subdomain}"
+            health_url = f"http://{container_name}:9000/health"
             log.info("agent_health_check_url", url=health_url)
             for attempt in range(15):
                 await asyncio.sleep(2)
