@@ -115,7 +115,7 @@ def create_orchestrator_app(
         domain=config.domain,
         ssl_cert_path=config.ssl_cert_path,
         ssl_key_path=config.ssl_key_path,
-        orch_port=config.port,
+        orch_port=config.nginx_host_port,
     )
 
     # ── Lifecycle ─────────────────────────────────────────────

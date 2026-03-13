@@ -38,6 +38,7 @@ class OrchestratorConfig(BaseSettings):
     # Networking
     domain: str = "agents.devpunks.io"
     nginx_conf_dir: str = "/etc/nginx/conf.d/agents"
+    nginx_host_port: int = 8002  # orchestrator port as seen from host (for nginx proxy)
     seed_node_url: str = "https://agents.devpunks.io"
 
     # Shared agent mode — assign all users to one existing agent

@@ -37,6 +37,7 @@ services:
       context: ../..
       dockerfile: orchestrator/Dockerfile
     container_name: a2a-orchestrator
+    pid: host  # Required for nsenter to reload nginx on host
     environment:
       ORCH_HOST: "0.0.0.0"
       ORCH_PORT: "8000"

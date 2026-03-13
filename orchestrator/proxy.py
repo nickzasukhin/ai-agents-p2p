@@ -183,27 +183,46 @@ class NginxProxy:
             await self._reload_nginx()
 
     async def _reload_nginx(self) -> bool:
-        """Reload nginx configuration."""
+        """Reload nginx on the host.
+
+        Tries multiple strategies:
+        1. Direct `nginx -s reload` (works if running on host or nginx in PATH)
+        2. Docker: run nginx reload in a temporary container with host PID/network
+        3. nsenter via PID 1 to reach host namespace (works with --pid=host)
+        """
+        # Strategy 1: direct nginx command
         try:
             proc = await asyncio.create_subprocess_exec(
                 "nginx", "-s", "reload",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
-
+            _, stderr = await proc.communicate()
             if proc.returncode == 0:
-                log.info("nginx_reloaded")
+                log.info("nginx_reloaded", method="direct")
                 return True
-            else:
-                log.error("nginx_reload_failed", stderr=stderr.decode()[:200])
-                return False
+            log.debug("nginx_direct_failed", stderr=stderr.decode()[:200])
         except FileNotFoundError:
-            log.warning("nginx_not_found_skip_reload")
-            return False
-        except Exception as e:
-            log.error("nginx_reload_error", error=str(e))
-            return False
+            pass
+
+        # Strategy 2: nsenter via PID 1 (requires --pid=host on container)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p",
+                "--", "nginx", "-s", "reload",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                log.info("nginx_reloaded", method="nsenter")
+                return True
+            log.debug("nginx_nsenter_failed", stderr=stderr.decode()[:200])
+        except FileNotFoundError:
+            pass
+
+        log.warning("nginx_reload_all_methods_failed")
+        return False
 
     def get_subdomain(self, subdomain_prefix: str) -> str:
         """Get the full subdomain URL."""
