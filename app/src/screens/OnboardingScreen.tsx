@@ -9,7 +9,7 @@ import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import { colors, spacing, fontSize, radius } from '../theme/tokens'
 import * as agent from '../api/agent'
-import { createAgent } from '../api/orchestrator'
+import { createAgent, getMyAgent } from '../api/orchestrator'
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -42,6 +42,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [progress, setProgress] = useState(saved?.progress || 0)
   const [cardPreview, setCardPreview] = useState<any>(saved?.cardPreview || null)
   const [goOnlineResult, setGoOnlineResult] = useState<any>(null)
+  const [setupStatus, setSetupStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Persist onboarding state to localStorage on changes
@@ -61,28 +62,73 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }, [messages])
 
   async function ensureAgent() {
-    // If no agent_token in localStorage, create/assign one via orchestrator
-    if (!localStorage.getItem('agent_token')) {
-      try {
-        await createAgent('My Agent')
-      } catch (err: any) {
-        console.warn('Agent assignment:', err.message)
-      }
+    // If we already have a token, just wait for the agent to be reachable
+    if (localStorage.getItem('agent_token')) {
+      setSetupStatus('Connecting to your agent...')
+      await agent.waitForReady(15000)
+      setSetupStatus(null)
+      return
     }
+
+    // Check if agent already exists on orchestrator side (e.g. token lost from localStorage)
+    try {
+      const info = await getMyAgent()
+      if (info.has_agent && info.api_token) {
+        localStorage.setItem('agent_token', info.api_token)
+        if (info.agent_url) localStorage.setItem('agent_url', info.agent_url)
+        setSetupStatus('Connecting to your agent...')
+        await agent.waitForReady(15000)
+        setSetupStatus(null)
+        return
+      }
+    } catch {
+      // Orchestrator unreachable — try creating anyway
+    }
+
+    // Create a new agent container
+    setSetupStatus('Setting up your agent...')
+    const result = await createAgent('My Agent')
+
+    // Wait for the container to become healthy
+    if (result.status !== 'running') {
+      setSetupStatus('Starting your agent container...')
+    }
+    const ready = await agent.waitForReady(30000)
+    if (!ready) {
+      throw new Error('Agent container did not start in time. Please refresh and try again.')
+    }
+    setSetupStatus(null)
   }
 
   async function startInterview() {
-    await ensureAgent()
     try {
-      const result = await agent.startOnboarding()
-      setSessionId(result.session_id)
-      setProgress(result.progress)
-      setMessages([{ content: result.response, isOwn: false }])
-    } catch {
+      await ensureAgent()
+    } catch (err: any) {
       setMessages([{
-        content: "Welcome! Tell me about yourself — your name and skills. For example: \"Alice, Python and FastAPI developer\"",
+        content: `Setup error: ${err.message}. Please refresh the page to try again.`,
         isOwn: false,
       }])
+      return
+    }
+
+    // Retry startOnboarding a few times — container may still be initializing
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await agent.startOnboarding()
+        setSessionId(result.session_id)
+        setProgress(result.progress)
+        setMessages([{ content: result.response, isOwn: false }])
+        return
+      } catch (err: any) {
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 2000))
+        } else {
+          setMessages([{
+            content: "Welcome! Tell me about yourself — your name and skills. For example: \"Alice, Python and FastAPI developer\"",
+            isOwn: false,
+          }])
+        }
+      }
     }
   }
 
@@ -190,7 +236,21 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       </div>
 
       {/* Content */}
-      {step === 'chat' && (
+      {setupStatus && (
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: spacing.md,
+        }}>
+          <div style={{
+            width: 32, height: 32, border: `3px solid ${colors.border}`,
+            borderTopColor: colors.accent, borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }} />
+          <p style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>{setupStatus}</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      )}
+      {step === 'chat' && !setupStatus && (
         <>
           <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: spacing.lg }}>
             {messages.map((m, i) => (

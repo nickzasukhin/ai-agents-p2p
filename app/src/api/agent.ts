@@ -49,6 +49,22 @@ export async function getHealth() {
   return agentRequest<{ status: string }>('/health')
 }
 
+/** Poll agent /health until it responds 200 or timeout (default 30s). */
+export async function waitForReady(timeoutMs = 30000): Promise<boolean> {
+  const base = getAgentBase()
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const resp = await fetch(`${base}/health`, { headers: headers() })
+      if (resp.ok) return true
+    } catch {
+      // Container not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  return false
+}
+
 // ── Onboarding ───────────────────────────────────────────
 
 export interface OnboardingStatus {
