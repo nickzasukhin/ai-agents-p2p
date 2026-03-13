@@ -38,6 +38,7 @@ services:
       dockerfile: orchestrator/Dockerfile
     container_name: a2a-orchestrator
     pid: host  # Required for nsenter to reload nginx on host
+    privileged: true  # Required for nsenter to access host namespaces
     environment:
       ORCH_HOST: "0.0.0.0"
       ORCH_PORT: "8000"
