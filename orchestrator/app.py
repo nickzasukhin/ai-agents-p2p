@@ -378,15 +378,10 @@ def create_orchestrator_app(
             await proxy.add_proxy(subdomain, result["port"])
 
             # Wait for container to become healthy (up to 30s)
-            # Use container's bridge IP since orchestrator runs inside Docker
-            # and can't reach host-mapped ports via 127.0.0.1
+            # With pid:host, orchestrator can reach host-mapped ports directly
             agent_ready = False
-            container_ip = await containers.get_container_ip(result["container_id"])
-            if container_ip:
-                health_url = f"http://{container_ip}:9000/health"
-            else:
-                health_url = f"http://127.0.0.1:{result['port']}/health"
-            log.info("agent_health_check_url", url=health_url, container_ip=container_ip)
+            health_url = f"http://127.0.0.1:{result['port']}/health"
+            log.info("agent_health_check_url", url=health_url)
             for attempt in range(15):
                 await asyncio.sleep(2)
                 try:
