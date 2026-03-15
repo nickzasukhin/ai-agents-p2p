@@ -181,6 +181,7 @@ export default function App() {
       }
     } catch {}
     setDetailAgentUrl(null)
+    setActiveTab('home')
   }
 
   function handleChatFromDetail(_peerUrl: string) {
