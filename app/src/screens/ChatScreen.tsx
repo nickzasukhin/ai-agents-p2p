@@ -70,8 +70,8 @@ export function ChatScreen() {
     )
   }
 
-  const showSidebar = !isMobile || !selectedPeer
-  const showChat = !isMobile || !!selectedPeer
+  const showSidebar = (!isMobile || !selectedPeer) && peerUrls.length > 0
+  const showChat = !isMobile || !!selectedPeer || peerUrls.length === 0
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -81,7 +81,7 @@ export function ChatScreen() {
           width: isMobile ? '100%' : 260,
           borderRight: isMobile ? 'none' : `1px solid ${colors.border}`,
           overflow: 'auto', flexShrink: 0,
-          display: peerUrls.length > 0 ? 'block' : isMobile ? 'none' : 'none',
+          display: 'block',
         }}>
           <div style={{ padding: spacing.md }}>
             <h2 style={{ fontSize: fontSize.md, fontWeight: 600, marginBottom: spacing.md }}>Chats</h2>
