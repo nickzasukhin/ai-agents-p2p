@@ -624,68 +624,67 @@ def create_app(
         # Immediately send the opening proposal to the peer via A2A
         send_result = None
         if neg.messages:
-            our_messages = [m for m in neg.messages if m.sender == neg.our_url]
-            if our_messages:
-                latest = our_messages[-1]
-                import httpx
-                a2a_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "message/send",
-                    "id": f"neg-{neg.id}-{neg.current_round}",
-                    "params": {
-                        "message": {
-                            "role": "user",
-                            "parts": [{"kind": "text", "text": json.dumps({
-                                "negotiation": True,
-                                "negotiation_id": neg.id,
-                                "sender_url": neg.our_url,
-                                "sender_name": neg.our_name,
-                                "message": latest.content,
-                            })}],
-                            "messageId": f"msg-{neg.id}-{neg.current_round}",
-                        },
+            # Take the last message — after start_negotiation, it's always our proposal
+            latest = neg.messages[-1]
+            import httpx
+            a2a_payload = {
+                "jsonrpc": "2.0",
+                "method": "message/send",
+                "id": f"neg-{neg.id}-{neg.current_round}",
+                "params": {
+                    "message": {
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": json.dumps({
+                            "negotiation": True,
+                            "negotiation_id": neg.id,
+                            "sender_url": neg.our_url,
+                            "sender_name": neg.our_name,
+                            "message": latest.content,
+                        })}],
+                        "messageId": f"msg-{neg.id}-{neg.current_round}",
                     },
-                }
+                },
+            }
 
-                try:
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        resp = await client.post(
-                            neg.their_url.rstrip("/") + "/",
-                            json=a2a_payload,
-                            headers={"Content-Type": "application/json"},
-                        )
-                        resp_data = resp.json()
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        neg.their_url.rstrip("/") + "/",
+                        json=a2a_payload,
+                        headers={"Content-Type": "application/json"},
+                    )
+                    resp_data = resp.json()
 
-                        # Parse A2A response
-                        response_text = ""
-                        result_data = resp_data.get("result", {})
-                        if isinstance(result_data, dict):
-                            for part in result_data.get("parts", []):
-                                if part.get("text"):
-                                    response_text = part["text"]
-                                    break
+                    # Parse A2A response
+                    response_text = ""
+                    result_data = resp_data.get("result", {})
+                    if isinstance(result_data, dict):
+                        for part in result_data.get("parts", []):
+                            if part.get("text"):
+                                response_text = part["text"]
+                                break
 
-                        # Process their negotiation response
-                        if response_text:
-                            try:
-                                resp_neg = json.loads(response_text)
-                                if resp_neg.get("negotiation"):
-                                    result = await negotiation_manager.handle_incoming_message(
-                                        sender_url=resp_neg.get("sender_url", neg.their_url),
-                                        sender_name=resp_neg.get("sender_name", neg.their_name),
-                                        message=resp_neg.get("message", response_text),
-                                        negotiation_id=neg.id,
-                                    )
-                                    send_result = result
+                    # Process their negotiation response
+                    if response_text:
+                        try:
+                            resp_neg = json.loads(response_text)
+                            if resp_neg.get("negotiation"):
+                                result = await negotiation_manager.handle_incoming_message(
+                                    sender_url=resp_neg.get("sender_url", neg.their_url),
+                                    sender_name=resp_neg.get("sender_name", neg.their_name),
+                                    message=resp_neg.get("message", response_text),
+                                    negotiation_id=neg.id,
+                                )
+                                send_result = result
 
-                                    # If confirmed, auto-start chat
-                                    if neg.state.value == "confirmed" and chat_manager:
-                                        asyncio.ensure_future(_start_chat_after_confirm(neg))
-                            except json.JSONDecodeError:
-                                pass
+                                # If confirmed, auto-start chat
+                                if neg.state.value == "confirmed" and chat_manager:
+                                    asyncio.ensure_future(_start_chat_after_confirm(neg))
+                        except json.JSONDecodeError:
+                            pass
 
-                except Exception as e:
-                    log.warning("negotiate_send_error", error=str(e), peer=agent_url)
+            except Exception as e:
+                log.warning("negotiate_send_error", error=str(e), peer=agent_url)
 
         await _ws_push_negotiations()
         await _ws_push_health()
