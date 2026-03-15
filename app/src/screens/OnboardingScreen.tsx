@@ -73,12 +73,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         if (elapsed > 10000) setSetupPhase('health_check')
       })
       if (ready) {
-        setSetupPhase('ready')
-        await new Promise((r) => setTimeout(r, 800))
-        setSetupPhase(null)
-        return
+        // Verify token actually works (container may have been recreated with new token)
+        try {
+          await agent.getOnboardingStatus()
+          setSetupPhase('ready')
+          await new Promise((r) => setTimeout(r, 800))
+          setSetupPhase(null)
+          return
+        } catch {
+          // Token invalid — fall through to get fresh token from orchestrator
+        }
       }
-      // Token exists but agent unreachable — fall through to check/create
+      // Token exists but agent unreachable or token invalid — fall through to check/create
     }
 
     // Check if agent already exists on orchestrator side (e.g. token lost from localStorage)
