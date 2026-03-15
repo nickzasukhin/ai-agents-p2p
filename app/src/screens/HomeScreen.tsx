@@ -34,7 +34,8 @@ export function HomeScreen({ onViewAgent, onSwitchToChat, onSwitchToSearch, init
   useEffect(() => {
     if (initialNegResult) {
       setNegResult(initialNegResult)
-      onNegResultConsumed?.()
+      // Clear parent state after a delay so React renders the toast first
+      setTimeout(() => onNegResultConsumed?.(), 100)
       if (initialNegResult.state === 'confirmed') {
         setTimeout(() => onSwitchToChat?.(), 1500)
       }

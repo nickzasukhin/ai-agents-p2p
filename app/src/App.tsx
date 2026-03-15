@@ -172,18 +172,21 @@ export default function App() {
   }
 
   async function handleNegotiateFromDetail(peerUrl: string) {
+    console.log('[negotiate-detail] starting with peer:', peerUrl)
     try {
       const result = await startNegotiation(peerUrl)
+      console.log('[negotiate-detail] result:', result)
       const state = (result as any).state || 'unknown'
       const peer = (result as any).peer || peerUrl
       if (state === 'confirmed') {
-        setDetailAgentUrl(null)
         setPendingNegResult({ peer, state })
+        setDetailAgentUrl(null)
         setActiveTab('chat')
         return
       }
       setPendingNegResult({ peer, state })
     } catch (err) {
+      console.error('[negotiate-detail] error:', err)
       setPendingNegResult({ peer: peerUrl, state: 'error' })
     }
     setDetailAgentUrl(null)
