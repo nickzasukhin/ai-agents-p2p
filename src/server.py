@@ -597,7 +597,12 @@ def create_app(
 
     @app.post("/negotiations/start-one")
     async def start_single_negotiation(request: Request):
-        """Start negotiation with a single matched agent by URL."""
+        """Start negotiation with a single matched agent by URL.
+
+        Creates the negotiation AND sends the opening proposal to the peer
+        via A2A, then processes their response. The full round-trip happens
+        in one call so the frontend doesn't need a separate send step.
+        """
         if not negotiation_manager or not discovery_loop:
             return JSONResponse({"error": "Negotiation or discovery not configured"}, 400)
 
@@ -613,16 +618,84 @@ def create_app(
 
         try:
             neg = await negotiation_manager.start_negotiation(match)
-            await _ws_push_negotiations()
-            await _ws_push_health()
-            return {
-                "status": "ok",
-                "negotiation_id": neg.id,
-                "peer": match.agent_name,
-                "state": neg.state.value,
-            }
         except Exception as e:
             return JSONResponse({"error": str(e)}, 409)
+
+        # Immediately send the opening proposal to the peer via A2A
+        send_result = None
+        if neg.messages:
+            our_messages = [m for m in neg.messages if m.sender == neg.our_url]
+            if our_messages:
+                latest = our_messages[-1]
+                import httpx
+                a2a_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "message/send",
+                    "id": f"neg-{neg.id}-{neg.current_round}",
+                    "params": {
+                        "message": {
+                            "role": "user",
+                            "parts": [{"kind": "text", "text": json.dumps({
+                                "negotiation": True,
+                                "negotiation_id": neg.id,
+                                "sender_url": neg.our_url,
+                                "sender_name": neg.our_name,
+                                "message": latest.content,
+                            })}],
+                            "messageId": f"msg-{neg.id}-{neg.current_round}",
+                        },
+                    },
+                }
+
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        resp = await client.post(
+                            neg.their_url.rstrip("/") + "/",
+                            json=a2a_payload,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        resp_data = resp.json()
+
+                        # Parse A2A response
+                        response_text = ""
+                        result_data = resp_data.get("result", {})
+                        if isinstance(result_data, dict):
+                            for part in result_data.get("parts", []):
+                                if part.get("text"):
+                                    response_text = part["text"]
+                                    break
+
+                        # Process their negotiation response
+                        if response_text:
+                            try:
+                                resp_neg = json.loads(response_text)
+                                if resp_neg.get("negotiation"):
+                                    result = await negotiation_manager.handle_incoming_message(
+                                        sender_url=resp_neg.get("sender_url", neg.their_url),
+                                        sender_name=resp_neg.get("sender_name", neg.their_name),
+                                        message=resp_neg.get("message", response_text),
+                                        negotiation_id=neg.id,
+                                    )
+                                    send_result = result
+
+                                    # If confirmed, auto-start chat
+                                    if neg.state.value == "confirmed" and chat_manager:
+                                        asyncio.ensure_future(_start_chat_after_confirm(neg))
+                            except json.JSONDecodeError:
+                                pass
+
+                except Exception as e:
+                    log.warning("negotiate_send_error", error=str(e), peer=agent_url)
+
+        await _ws_push_negotiations()
+        await _ws_push_health()
+        return {
+            "status": "ok",
+            "negotiation_id": neg.id,
+            "peer": match.agent_name,
+            "state": neg.state.value,
+            "send_result": send_result,
+        }
 
     @app.post("/negotiations/{negotiation_id}/send")
     async def send_negotiation_message(negotiation_id: str):
@@ -873,11 +946,41 @@ def create_app(
 
     @app.get("/chats")
     async def list_chats():
-        """List all chat channels (confirmed negotiations)."""
+        """List all chat channels, keyed by peer_url for frontend compatibility.
+
+        Returns: { chats: { "https://peer.url": [ChatMessage, ...], ... } }
+        """
         if not chat_manager:
-            return {"chats": []}
-        chats = await chat_manager.get_chats()
-        return {"chats": chats, "chat_mode": chat_manager.chat_mode}
+            return {"chats": {}}
+
+        raw_chats = await chat_manager.get_chats()
+        # Transform list into Record<peer_url, ChatMessage[]>
+        grouped: dict[str, list[dict]] = {}
+        our_url = chat_manager.our_url
+
+        for chat in raw_chats:
+            peer_url = chat.get("their_url", "")
+            neg_id = chat["negotiation_id"]
+            if not peer_url:
+                continue
+
+            # Load full message history for this negotiation
+            messages = await chat_manager.get_messages(neg_id, limit=200)
+            chat_messages = []
+            for m in messages:
+                chat_messages.append({
+                    "id": m.get("id", ""),
+                    "peer_url": peer_url,
+                    "negotiation_id": neg_id,
+                    "direction": "outbound" if m.get("sender_url") == our_url else "inbound",
+                    "content": m.get("message", ""),
+                    "timestamp": m.get("timestamp", ""),
+                    "sender_name": m.get("sender_name", ""),
+                })
+
+            grouped[peer_url] = chat_messages
+
+        return {"chats": grouped, "chat_mode": chat_manager.chat_mode}
 
     @app.get("/chats/{negotiation_id}/messages")
     async def get_chat_messages(negotiation_id: str):
@@ -886,6 +989,49 @@ def create_app(
             return {"messages": []}
         messages = await chat_manager.get_messages(negotiation_id)
         return {"messages": messages, "count": len(messages)}
+
+    @app.post("/chats/send")
+    async def send_chat_by_peer(request: Request):
+        """Send a chat message by peer_url (frontend-friendly).
+
+        Body: { peer_url: string, message: string }
+        Resolves peer_url → negotiation_id internally.
+        """
+        if not chat_manager:
+            return JSONResponse({"error": "Chat not configured"}, status_code=503)
+        if not negotiation_manager:
+            return JSONResponse({"error": "Negotiation not configured"}, status_code=503)
+
+        body, err = await _safe_json(request)
+        if err:
+            return err
+
+        peer_url = (body.get("peer_url") or "").strip().rstrip("/")
+        text = (body.get("message") or "").strip()
+
+        if not peer_url:
+            return JSONResponse({"error": "peer_url required"}, status_code=400)
+        if not text:
+            return JSONResponse({"error": "message required"}, status_code=400)
+
+        # Find negotiation by peer_url
+        neg_id = negotiation_manager._by_peer.get(peer_url)
+        if not neg_id:
+            # Try with trailing slash variants
+            for url, nid in negotiation_manager._by_peer.items():
+                if url.rstrip("/") == peer_url:
+                    neg_id = nid
+                    break
+
+        if not neg_id:
+            return JSONResponse(
+                {"error": f"No negotiation found for peer {peer_url}"},
+                status_code=404,
+            )
+
+        msg = await chat_manager.send_owner_message(neg_id, text, peer_url)
+        await _ws_push_chat()
+        return {"ok": True, **msg}
 
     @app.post("/chats/{negotiation_id}/send")
     async def send_chat_message(negotiation_id: str, request: Request):

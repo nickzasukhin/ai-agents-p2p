@@ -11,13 +11,16 @@ import * as orchApi from '../api/orchestrator'
 
 interface HomeScreenProps {
   onViewAgent?: (agentUrl: string) => void
+  onSwitchToChat?: () => void
 }
 
-export function HomeScreen({ onViewAgent }: HomeScreenProps) {
+export function HomeScreen({ onViewAgent, onSwitchToChat }: HomeScreenProps) {
   const [matches, setMatches] = useState<agentApi.Match[]>([])
   const [onlineStatus, setOnlineStatus] = useState<agentApi.OnlineStatus | null>(null)
   const [agentInfo, setAgentInfo] = useState<orchApi.AgentInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [negotiating, setNegotiating] = useState<string | null>(null)
+  const [negResult, setNegResult] = useState<{ peer: string; state: string } | null>(null)
 
   useEffect(() => {
     loadData()
@@ -48,13 +51,26 @@ export function HomeScreen({ onViewAgent }: HomeScreenProps) {
   }
 
   async function handleNegotiate(peerUrl: string) {
+    setNegotiating(peerUrl)
+    setNegResult(null)
     try {
       console.log('[negotiate] starting with peer:', peerUrl)
       const result = await agentApi.startNegotiation(peerUrl)
       console.log('[negotiate] result:', result)
+      const state = (result as any).state || 'unknown'
+      const peer = (result as any).peer || peerUrl
+      setNegResult({ peer, state })
+
+      // If confirmed, switch to chat after a short delay
+      if (state === 'confirmed') {
+        setTimeout(() => onSwitchToChat?.(), 1500)
+      }
       loadData()
     } catch (err) {
       console.error('[negotiate] error:', err)
+      setNegResult({ peer: peerUrl, state: 'error' })
+    } finally {
+      setNegotiating(null)
     }
   }
 
@@ -107,6 +123,35 @@ export function HomeScreen({ onViewAgent }: HomeScreenProps) {
           )}
         </Card>
       </div>
+
+      {/* Negotiation status */}
+      {negotiating && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, padding: spacing.sm }}>
+            <div style={{ animation: 'pulse 1s infinite', fontSize: 20 }}>⏳</div>
+            <span style={{ color: colors.textSecondary }}>Negotiating with peer... This may take a moment.</span>
+          </div>
+        </Card>
+      )}
+      {negResult && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, padding: spacing.sm }}>
+            <span style={{ fontSize: 20 }}>
+              {negResult.state === 'confirmed' ? '✅' : negResult.state === 'error' ? '❌' : '🤝'}
+            </span>
+            <span style={{ color: colors.textSecondary }}>
+              {negResult.state === 'confirmed'
+                ? `Collaboration confirmed with ${negResult.peer}! Switching to chat...`
+                : negResult.state === 'error'
+                ? `Negotiation failed. Try again later.`
+                : `Negotiation with ${negResult.peer} — state: ${negResult.state}`}
+            </span>
+            {negResult.state === 'confirmed' && (
+              <Button small onClick={() => onSwitchToChat?.()}>Go to Chat</Button>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Matches */}
       <h2 style={{ fontSize: fontSize.lg, fontWeight: 600, marginBottom: spacing.md }}>

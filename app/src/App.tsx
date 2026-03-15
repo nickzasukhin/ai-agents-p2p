@@ -160,7 +160,13 @@ export default function App() {
 
   async function handleNegotiateFromDetail(peerUrl: string) {
     try {
-      await startNegotiation(peerUrl)
+      const result = await startNegotiation(peerUrl)
+      const state = (result as any).state
+      if (state === 'confirmed') {
+        setDetailAgentUrl(null)
+        setActiveTab('chat')
+        return
+      }
     } catch {}
     setDetailAgentUrl(null)
   }
@@ -243,7 +249,7 @@ export default function App() {
           />
         ) : (
           <>
-            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} />}
+            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} onSwitchToChat={() => setActiveTab('chat')} />}
             {activeTab === 'search' && <SearchScreen onViewAgent={handleViewAgent} />}
             {activeTab === 'chat' && <ChatScreen />}
             {activeTab === 'profile' && <ProfileScreen onLogout={handleLogout} />}
