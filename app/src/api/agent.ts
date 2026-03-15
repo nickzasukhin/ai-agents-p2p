@@ -49,11 +49,18 @@ export async function getHealth() {
   return agentRequest<{ status: string }>('/health')
 }
 
-/** Poll agent /health until it responds 200 or timeout (default 30s). */
-export async function waitForReady(timeoutMs = 30000): Promise<boolean> {
+/** Poll agent /health until it responds 200 or timeout (default 30s).
+ *  Optional onAttempt callback reports progress. */
+export async function waitForReady(
+  timeoutMs = 30000,
+  onAttempt?: (attempt: number, elapsedMs: number) => void,
+): Promise<boolean> {
   const base = getAgentBase()
   const start = Date.now()
+  let attempt = 0
   while (Date.now() - start < timeoutMs) {
+    attempt++
+    onAttempt?.(attempt, Date.now() - start)
     try {
       const resp = await fetch(`${base}/health`, { headers: headers() })
       if (resp.ok) return true

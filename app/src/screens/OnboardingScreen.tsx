@@ -1,4 +1,4 @@
-/** Onboarding screen — chat interview + card preview + go online. */
+/** Onboarding screen — container setup progress + chat interview + card preview + go online. */
 
 import { useState, useRef, useEffect } from 'react'
 import { Logo } from '../components/Logo'
@@ -7,7 +7,8 @@ import { Input } from '../components/Input'
 import { ChatBubble } from '../components/ChatBubble'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
-import { colors, spacing, fontSize, radius } from '../theme/tokens'
+import { ContainerSetupScreen, type SetupPhase } from '../components/ContainerSetupScreen'
+import { colors, spacing, fontSize } from '../theme/tokens'
 import * as agent from '../api/agent'
 import { createAgent, getMyAgent } from '../api/orchestrator'
 
@@ -42,7 +43,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [progress, setProgress] = useState(saved?.progress || 0)
   const [cardPreview, setCardPreview] = useState<any>(saved?.cardPreview || null)
   const [goOnlineResult, setGoOnlineResult] = useState<any>(null)
-  const [setupStatus, setSetupStatus] = useState<string | null>(null)
+  const [setupPhase, setSetupPhase] = useState<SetupPhase | null>(null)
+  const [setupError, setSetupError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Persist onboarding state to localStorage on changes
@@ -62,52 +64,85 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }, [messages])
 
   async function ensureAgent() {
+    setSetupError(null)
+
     // If we already have a token, just wait for the agent to be reachable
     if (localStorage.getItem('agent_token')) {
-      setSetupStatus('Connecting to your agent...')
-      await agent.waitForReady(15000)
-      setSetupStatus(null)
-      return
+      setSetupPhase('health_check')
+      const ready = await agent.waitForReady(15000, (_attempt, elapsed) => {
+        if (elapsed > 10000) setSetupPhase('health_check')
+      })
+      if (ready) {
+        setSetupPhase('ready')
+        await new Promise((r) => setTimeout(r, 800))
+        setSetupPhase(null)
+        return
+      }
+      // Token exists but agent unreachable — fall through to check/create
     }
 
     // Check if agent already exists on orchestrator side (e.g. token lost from localStorage)
     try {
+      setSetupPhase('health_check')
       const info = await getMyAgent()
       if (info.has_agent && info.api_token) {
         localStorage.setItem('agent_token', info.api_token)
         if (info.agent_url) localStorage.setItem('agent_url', info.agent_url)
-        setSetupStatus('Connecting to your agent...')
-        await agent.waitForReady(15000)
-        setSetupStatus(null)
-        return
+
+        if (info.status === 'running') {
+          setSetupPhase('health_check')
+        } else {
+          setSetupPhase('starting')
+        }
+
+        const ready = await agent.waitForReady(30000, (_attempt, elapsed) => {
+          if (elapsed > 5000) setSetupPhase('health_check')
+        })
+        if (ready) {
+          setSetupPhase('ready')
+          await new Promise((r) => setTimeout(r, 800))
+          setSetupPhase(null)
+          return
+        }
+        // If not ready after 30s, fall through to timeout
+        setSetupPhase('timeout')
+        setSetupError('Agent container did not start in time.')
+        throw new Error('Agent container did not start in time. Please try again.')
       }
-    } catch {
+    } catch (err: any) {
+      if (setupPhase === 'timeout') throw err
       // Orchestrator unreachable — try creating anyway
     }
 
     // Create a new agent container
-    setSetupStatus('Setting up your agent...')
+    setSetupPhase('creating')
     const result = await createAgent('My Agent')
 
     // Wait for the container to become healthy
-    if (result.status !== 'running') {
-      setSetupStatus('Starting your agent container...')
-    }
-    const ready = await agent.waitForReady(30000)
+    setSetupPhase('starting')
+    const ready = await agent.waitForReady(45000, (_attempt, elapsed) => {
+      if (elapsed > 8000) setSetupPhase('health_check')
+    })
+
     if (!ready) {
-      throw new Error('Agent container did not start in time. Please refresh and try again.')
+      setSetupPhase('timeout')
+      setSetupError('Agent container did not start in time.')
+      throw new Error('Agent container did not start in time. Please try again.')
     }
-    setSetupStatus(null)
+
+    setSetupPhase('ready')
+    await new Promise((r) => setTimeout(r, 800))
+    setSetupPhase(null)
   }
 
   async function startInterview() {
     try {
       await ensureAgent()
     } catch (err: any) {
-      setMessages([{
-        content: `Setup error: ${err.message}. Please refresh the page to try again.`,
-        isOwn: false,
-      }])
+      // If it's a timeout/error, the ContainerSetupScreen handles retry
+      if (setupPhase === 'timeout' || setupPhase === 'error') return
+      setSetupPhase('error')
+      setSetupError(err.message)
       return
     }
 
@@ -124,12 +159,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           await new Promise((r) => setTimeout(r, 2000))
         } else {
           setMessages([{
-            content: "Welcome! Tell me about yourself — your name and skills. For example: \"Alice, Python and FastAPI developer\"",
+            content: "Welcome! Tell me about yourself \u2014 your name and skills. For example: \"Alice, Python and FastAPI developer\"",
             isOwn: false,
           }])
         }
       }
     }
+  }
+
+  function handleRetry() {
+    setSetupPhase(null)
+    setSetupError(null)
+    startInterview()
   }
 
   async function handleSend() {
@@ -209,6 +250,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const showNext = progress >= 0.9 && !input.trim() && !loading
 
+  // ── Container Setup Screen (full-screen during container creation) ──
+  if (setupPhase && setupPhase !== 'ready') {
+    return (
+      <ContainerSetupScreen
+        phase={setupPhase}
+        error={setupError}
+        onRetry={handleRetry}
+      />
+    )
+  }
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100vh',
@@ -235,22 +287,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         </div>
       </div>
 
-      {/* Content */}
-      {setupStatus && (
-        <div style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: spacing.md,
-        }}>
-          <div style={{
-            width: 32, height: 32, border: `3px solid ${colors.border}`,
-            borderTopColor: colors.accent, borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }} />
-          <p style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>{setupStatus}</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        </div>
-      )}
-      {step === 'chat' && !setupStatus && (
+      {/* Chat */}
+      {step === 'chat' && (
         <>
           <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: spacing.lg }}>
             {messages.map((m, i) => (

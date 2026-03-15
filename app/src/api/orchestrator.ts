@@ -128,6 +128,17 @@ export async function deleteMyAgent() {
   return request<{ ok: boolean }>('/agents/mine', { method: 'DELETE' })
 }
 
+export interface AgentStatus {
+  status: string      // "no_agent" | "starting" | "running" | "error"
+  phase: string       // "none" | "starting" | "ready"
+  agent_url?: string
+  api_token?: string
+}
+
+export async function getAgentStatus(): Promise<AgentStatus> {
+  return request<AgentStatus>('/agents/mine/status')
+}
+
 // ── Session helpers ──────────────────────────────────────
 
 export function isAuthenticated(): boolean {

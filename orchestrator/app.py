@@ -381,13 +381,13 @@ def create_orchestrator_app(
             # Update nginx proxy
             await proxy.add_proxy(subdomain, result["port"])
 
-            # Wait for container to become healthy (up to 30s)
+            # Quick health check (up to 6s) — frontend handles the rest with progress UI
             # Use container name on shared network (port 9000 = internal port)
             agent_ready = False
             container_name = f"agent-{subdomain}"
             health_url = f"http://{container_name}:9000/health"
             log.info("agent_health_check_url", url=health_url)
-            for attempt in range(15):
+            for attempt in range(3):
                 await asyncio.sleep(2)
                 try:
                     async with httpx.AsyncClient(timeout=3) as client:
@@ -460,6 +460,38 @@ def create_orchestrator_app(
             "port": agent["port"],
             "container_health": health,
             "created_at": agent["created_at"],
+        }
+
+    @app.get("/agents/mine/status")
+    async def get_agent_status(request: Request):
+        """Lightweight status polling for container creation progress."""
+        user = await get_current_user(request)
+        agent = await _db.get_agent_by_user(user["id"])
+
+        if not agent:
+            return {"status": "no_agent", "phase": "none"}
+
+        status = agent["status"]
+        phase = "ready" if status == "running" else "starting"
+
+        # Quick container health check
+        if agent.get("container_id") and agent["container_id"] != "shared":
+            try:
+                health = await containers.health_check(agent["container_id"])
+                if health.get("running"):
+                    phase = "ready"
+                    if status != "running":
+                        await _db.update_agent_status(agent["id"], "running")
+            except Exception:
+                phase = "starting"
+        elif agent.get("container_id") == "shared":
+            phase = "ready"
+
+        return {
+            "status": status,
+            "phase": phase,
+            "agent_url": agent["agent_url"],
+            "api_token": agent["api_token"],
         }
 
     @app.delete("/agents/mine")
