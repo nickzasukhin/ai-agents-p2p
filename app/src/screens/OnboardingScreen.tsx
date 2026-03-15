@@ -81,7 +81,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           setSetupPhase(null)
           return
         } catch {
-          // Token invalid — fall through to get fresh token from orchestrator
+          // Token invalid — clear stale state and get fresh token from orchestrator
+          clearOnboarding()
+          setMessages([])
+          setSessionId('')
+          setProgress(0)
         }
       }
       // Token exists but agent unreachable or token invalid — fall through to check/create
