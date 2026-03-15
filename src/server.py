@@ -625,7 +625,25 @@ def create_app(
         match_list = discovery_loop.get_matches()
         match = next((m for m in match_list if m.agent_url.rstrip("/") == agent_url), None)
         if not match:
-            return JSONResponse({"error": "Agent not found in current matches"}, 404)
+            # Agent not in discovery matches (e.g. found via registry search).
+            # Create an ad-hoc match so negotiation can proceed.
+            from src.matching.engine import AgentMatch
+            agent_name = body.get("agent_name", agent_url.split("//")[-1].split(".")[0])
+            # Try to fetch real name from agent card
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    card_resp = await client.get(agent_url.rstrip("/") + "/.well-known/agent-card.json")
+                    if card_resp.status_code == 200:
+                        card = card_resp.json()
+                        agent_name = card.get("name", agent_name)
+            except Exception:
+                pass
+            match = AgentMatch(
+                agent_url=agent_url,
+                agent_name=agent_name,
+                overall_score=0.5,
+            )
 
         try:
             neg = await negotiation_manager.start_negotiation(match)
