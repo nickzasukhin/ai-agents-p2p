@@ -13,9 +13,11 @@ interface HomeScreenProps {
   onViewAgent?: (agentUrl: string) => void
   onSwitchToChat?: () => void
   onSwitchToSearch?: () => void
+  initialNegResult?: { peer: string; state: string } | null
+  onNegResultConsumed?: () => void
 }
 
-export function HomeScreen({ onViewAgent, onSwitchToChat, onSwitchToSearch }: HomeScreenProps) {
+export function HomeScreen({ onViewAgent, onSwitchToChat, onSwitchToSearch, initialNegResult, onNegResultConsumed }: HomeScreenProps) {
   const [matches, setMatches] = useState<agentApi.Match[]>([])
   const [onlineStatus, setOnlineStatus] = useState<agentApi.OnlineStatus | null>(null)
   const [agentInfo, setAgentInfo] = useState<orchApi.AgentInfo | null>(null)
@@ -27,6 +29,18 @@ export function HomeScreen({ onViewAgent, onSwitchToChat, onSwitchToSearch }: Ho
   useEffect(() => {
     loadData()
   }, [])
+
+  // Show neg result passed from detail view
+  useEffect(() => {
+    if (initialNegResult) {
+      setNegResult(initialNegResult)
+      onNegResultConsumed?.()
+      if (initialNegResult.state === 'confirmed') {
+        setTimeout(() => onSwitchToChat?.(), 1500)
+      }
+      loadData()
+    }
+  }, [initialNegResult])
 
   // Auto-refresh while no matches and discovery is still running early cycles
   useEffect(() => {

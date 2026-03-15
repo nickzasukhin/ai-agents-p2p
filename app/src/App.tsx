@@ -70,6 +70,7 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [activeTab, setActiveTab] = useState<Tab>('home')
   const [detailAgentUrl, setDetailAgentUrl] = useState<string | null>(null)
+  const [pendingNegResult, setPendingNegResult] = useState<{ peer: string; state: string } | null>(null)
 
   useEffect(() => {
     // On subdomain, consume URL tokens from redirect first
@@ -173,13 +174,18 @@ export default function App() {
   async function handleNegotiateFromDetail(peerUrl: string) {
     try {
       const result = await startNegotiation(peerUrl)
-      const state = (result as any).state
+      const state = (result as any).state || 'unknown'
+      const peer = (result as any).peer || peerUrl
       if (state === 'confirmed') {
         setDetailAgentUrl(null)
+        setPendingNegResult({ peer, state })
         setActiveTab('chat')
         return
       }
-    } catch {}
+      setPendingNegResult({ peer, state })
+    } catch (err) {
+      setPendingNegResult({ peer: peerUrl, state: 'error' })
+    }
     setDetailAgentUrl(null)
     setActiveTab('home')
   }
@@ -262,7 +268,7 @@ export default function App() {
           />
         ) : (
           <>
-            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} onSwitchToChat={() => setActiveTab('chat')} onSwitchToSearch={() => setActiveTab('search')} />}
+            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} onSwitchToChat={() => setActiveTab('chat')} onSwitchToSearch={() => setActiveTab('search')} initialNegResult={pendingNegResult} onNegResultConsumed={() => setPendingNegResult(null)} />}
             {activeTab === 'search' && <SearchScreen onViewAgent={handleViewAgent} />}
             {activeTab === 'chat' && <ChatScreen />}
             {activeTab === 'profile' && <ProfileScreen onLogout={handleLogout} />}
