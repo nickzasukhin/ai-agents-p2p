@@ -12,32 +12,47 @@ import * as orchApi from '../api/orchestrator'
 interface HomeScreenProps {
   onViewAgent?: (agentUrl: string) => void
   onSwitchToChat?: () => void
+  onSwitchToSearch?: () => void
 }
 
-export function HomeScreen({ onViewAgent, onSwitchToChat }: HomeScreenProps) {
+export function HomeScreen({ onViewAgent, onSwitchToChat, onSwitchToSearch }: HomeScreenProps) {
   const [matches, setMatches] = useState<agentApi.Match[]>([])
   const [onlineStatus, setOnlineStatus] = useState<agentApi.OnlineStatus | null>(null)
   const [agentInfo, setAgentInfo] = useState<orchApi.AgentInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [negotiating, setNegotiating] = useState<string | null>(null)
   const [negResult, setNegResult] = useState<{ peer: string; state: string } | null>(null)
+  const [discoveryRuns, setDiscoveryRuns] = useState(0)
 
   useEffect(() => {
     loadData()
   }, [])
 
+  // Auto-refresh while no matches and discovery is still running early cycles
+  useEffect(() => {
+    if (loading) return
+    if (matches.length > 0 || discoveryRuns >= 5) return
+    const t = setInterval(loadData, 10000)
+    return () => clearInterval(t)
+  }, [loading, matches.length, discoveryRuns])
+
   async function loadData() {
     setLoading(true)
     try {
-      const [matchesResp, status, info] = await Promise.allSettled([
+      const [matchesResp, status, info, health] = await Promise.allSettled([
         agentApi.getMatches(),
         agentApi.getOnlineStatus(),
         orchApi.getMyAgent(),
+        agentApi.getHealth(),
       ])
 
       if (matchesResp.status === 'fulfilled') setMatches(matchesResp.value.matches || [])
       if (status.status === 'fulfilled') setOnlineStatus(status.value)
       if (info.status === 'fulfilled') setAgentInfo(info.value)
+      if (health.status === 'fulfilled') {
+        const h = health.value as any
+        setDiscoveryRuns(h?.discovery?.runs_completed ?? 0)
+      }
     } finally {
       setLoading(false)
     }
@@ -161,14 +176,42 @@ export function HomeScreen({ onViewAgent, onSwitchToChat }: HomeScreenProps) {
       {matches.length === 0 ? (
         <Card>
           <div style={{ textAlign: 'center', padding: spacing.xl }}>
-            <div style={{ fontSize: 48, marginBottom: spacing.md }}>🔍</div>
-            <h3 style={{ fontSize: fontSize.lg, marginBottom: spacing.sm }}>No matches yet</h3>
-            <p style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>
-              {onlineStatus?.is_online
-                ? 'Your agent is discovering the network. Check back soon!'
-                : 'Go online to start discovering compatible agents.'
-              }
-            </p>
+            {!onlineStatus?.is_online ? (
+              <>
+                <div style={{ fontSize: 48, marginBottom: spacing.md }}>📡</div>
+                <h3 style={{ fontSize: fontSize.lg, marginBottom: spacing.sm }}>Go online to discover agents</h3>
+                <p style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>
+                  Your agent needs to be online to find compatible peers.
+                </p>
+              </>
+            ) : discoveryRuns < 3 ? (
+              <>
+                <div style={{
+                  width: 48, height: 48, borderRadius: '50%',
+                  border: `3px solid ${colors.border}`, borderTopColor: colors.accent,
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto', marginBottom: spacing.md,
+                }} />
+                <h3 style={{ fontSize: fontSize.lg, marginBottom: spacing.sm }}>Searching for compatible agents...</h3>
+                <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.md }}>
+                  Usually takes 30–60 seconds. Discovery cycle {discoveryRuns}/3
+                </p>
+                {onSwitchToSearch && (
+                  <Button small variant="secondary" onClick={onSwitchToSearch}>Search manually</Button>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 48, marginBottom: spacing.md }}>🔍</div>
+                <h3 style={{ fontSize: fontSize.lg, marginBottom: spacing.sm }}>No compatible agents found yet</h3>
+                <p style={{ color: colors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.md }}>
+                  Discovery is running. Try searching manually for agents.
+                </p>
+                {onSwitchToSearch && (
+                  <Button small variant="secondary" onClick={onSwitchToSearch}>Search agents</Button>
+                )}
+              </>
+            )}
           </div>
         </Card>
       ) : (

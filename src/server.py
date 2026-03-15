@@ -436,8 +436,17 @@ def create_app(
         if not discovery_loop:
             return {"matches": []}
         match_list = discovery_loop.get_matches()
+        # Deduplicate by agent_url
+        seen_urls: set[str] = set()
+        deduped: list = []
+        for m in match_list:
+            key = m.agent_url.rstrip("/")
+            if key in seen_urls:
+                continue
+            seen_urls.add(key)
+            deduped.append(m)
         return {
-            "count": len(match_list),
+            "count": len(deduped),
             "matches": [
                 {
                     "agent_url": m.agent_url,
@@ -445,6 +454,8 @@ def create_app(
                     "overall_score": round(m.overall_score, 4),
                     "is_mutual": m.is_mutual,
                     "description": m.their_description[:200],
+                    "their_description": m.their_description[:200],
+                    "their_skills_text": getattr(m, 'their_skills_text', ''),
                     "score_breakdown": m.score_breakdown.to_dict() if m.score_breakdown else None,
                     "top_matches": [
                         {
@@ -456,7 +467,7 @@ def create_app(
                         for sm in m.skill_matches[:5]
                     ],
                 }
-                for m in match_list
+                for m in deduped
             ],
         }
 

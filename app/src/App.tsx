@@ -147,11 +147,23 @@ export default function App() {
 
   function handleViewAgent(agentUrl: string) {
     setDetailAgentUrl(agentUrl)
+    window.history.pushState({ detail: true }, '')
   }
 
   function handleBackFromDetail() {
     setDetailAgentUrl(null)
   }
+
+  // Hardware back button support
+  useEffect(() => {
+    function onPop() {
+      if (detailAgentUrl) {
+        setDetailAgentUrl(null)
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [detailAgentUrl])
 
   function handleTabClick(tab: Tab) {
     setDetailAgentUrl(null)
@@ -249,7 +261,7 @@ export default function App() {
           />
         ) : (
           <>
-            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} onSwitchToChat={() => setActiveTab('chat')} />}
+            {activeTab === 'home' && <HomeScreen onViewAgent={handleViewAgent} onSwitchToChat={() => setActiveTab('chat')} onSwitchToSearch={() => setActiveTab('search')} />}
             {activeTab === 'search' && <SearchScreen onViewAgent={handleViewAgent} />}
             {activeTab === 'chat' && <ChatScreen />}
             {activeTab === 'profile' && <ProfileScreen onLogout={handleLogout} />}
@@ -265,7 +277,7 @@ export default function App() {
         padding: `${spacing.xs}px 0`,
         flexShrink: 0,
       }}
-        className="mobile-tabs"
+        className={detailAgentUrl ? '' : 'mobile-tabs'}
       >
         {(['home', 'search', 'chat', 'profile'] as Tab[]).map((tab) => (
           <button

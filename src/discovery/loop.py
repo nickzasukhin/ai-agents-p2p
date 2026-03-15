@@ -51,6 +51,7 @@ class DiscoveryLoop:
         registry_client: RegistryClient | None = None,
         registry_urls: list[str] | None = None,
         a2a_registry_enabled: bool = True,
+        our_url: str = "",
     ):
         self.registry = registry
         self.a2a_client = a2a_client
@@ -65,6 +66,7 @@ class DiscoveryLoop:
         self.registry_client = registry_client
         self.registry_urls = registry_urls or []
         self.a2a_registry_enabled = a2a_registry_enabled
+        self.our_url = our_url
         self.state = DiscoveryState()
         self._task: asyncio.Task | None = None
 
@@ -116,7 +118,22 @@ class DiscoveryLoop:
         for agent in discovered:
             self.state.discovered_agents[agent.url] = agent
 
-        # Step 4: Build match contexts (Phase 6.7) and run matching
+        # Step 4: Filter self-matches and deduplicate
+        if discovered and self.our_url:
+            own = self.our_url.rstrip("/")
+            seen: set[str] = set()
+            filtered: list[DiscoveredAgent] = []
+            for a in discovered:
+                u = a.url.rstrip("/")
+                if u == own or u in seen:
+                    continue
+                seen.add(u)
+                filtered.append(a)
+            if len(filtered) < len(discovered):
+                log.info("discovery_filtered", original=len(discovered), filtered=len(filtered))
+            discovered = filtered
+
+        # Step 5: Build match contexts (Phase 6.7) and run matching
         if discovered:
             match_contexts = await self._build_match_contexts(discovered)
             self.state.matches = self.matching.find_matches(

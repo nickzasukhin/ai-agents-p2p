@@ -55,8 +55,11 @@ export function MatchCard({
         </div>
       </div>
       <div style={{ display: 'flex', gap: spacing.sm, marginTop: spacing.md }}>
-        {onNegotiate && <Button small onClick={onNegotiate}>Negotiate</Button>}
-        {onView && <Button small variant="secondary" onClick={onView}>View</Button>}
+        {onNegotiate && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Button small onClick={onNegotiate}>Negotiate</Button>
+          </div>
+        )}
       </div>
     </Card>
   )

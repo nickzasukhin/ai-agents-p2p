@@ -164,6 +164,7 @@ def setup_discovery(
         registry_client=registry_client,
         registry_urls=registry_urls,
         a2a_registry_enabled=a2a_registry_enabled,
+        our_url=own_url,
     )
 
     log.info("discovery_configured", peers=len(registry), interval=discovery_interval)

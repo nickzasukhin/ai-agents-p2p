@@ -92,8 +92,11 @@ export function SearchScreen({ onViewAgent }: SearchScreenProps) {
       ) : (
         <div style={{ textAlign: 'center', padding: spacing.xxl }}>
           <div style={{ fontSize: 64, marginBottom: spacing.md }}>🌐</div>
-          <p style={{ color: colors.textMuted, fontSize: fontSize.md }}>
+          <p style={{ color: colors.textMuted, fontSize: fontSize.md, marginBottom: spacing.md }}>
             Search across local agents and global registries
+          </p>
+          <p style={{ color: colors.textMuted, fontSize: fontSize.sm }}>
+            Try: "Python", "security", "DevOps", "AI", "frontend"
           </p>
         </div>
       )}
