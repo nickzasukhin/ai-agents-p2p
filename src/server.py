@@ -2125,6 +2125,21 @@ async function doNegotiate() {{
             await stop_tunnel(tunnel_info)
             log.info("tunnel_stopped_on_shutdown")
 
+    # ── Root endpoint: content negotiation ──────────────────────
+    @app.get("/")
+    async def root_handler(request: Request):
+        """Smart root: browsers get profile HTML, A2A clients get agent card JSON."""
+        accept = request.headers.get("accept", "")
+        # Browsers send Accept: text/html
+        if "text/html" in accept:
+            return RedirectResponse(url="/profile", status_code=302)
+        # A2A clients / curl / API consumers get agent card
+        card = app.state.agent_card
+        return JSONResponse(
+            content=json.loads(card.model_dump_json()),
+            media_type="application/json",
+        )
+
     # ── Serve Agent Card (overrides A2A mount for live card) ──────
     @app.get("/.well-known/agent-card.json")
     async def serve_agent_card():

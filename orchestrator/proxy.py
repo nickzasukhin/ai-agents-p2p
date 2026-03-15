@@ -30,15 +30,6 @@ server {{
     ssl_certificate {ssl_cert_path};
     ssl_certificate_key {ssl_key_path};
 
-    # Public profile at root (exact match)
-    location = / {{
-        proxy_pass http://127.0.0.1:{port}/profile;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }}
-
     # Orchestrator API (auth, agent management)
     location /orch/ {{
         proxy_pass http://127.0.0.1:{orch_port}/;
@@ -48,7 +39,8 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
     }}
 
-    # Everything else (agent API, SPA at /app, A2A, WebSocket)
+    # Everything: agent API, SPA at /app, A2A JSON-RPC (POST /), profile, WebSocket
+    # The agent backend handles routing: GET / → profile, POST / → A2A
     location / {{
         proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;
@@ -74,15 +66,6 @@ server {{
     listen 80;
     server_name {subdomain};
 
-    # Public profile at root (exact match)
-    location = / {{
-        proxy_pass http://127.0.0.1:{port}/profile;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }}
-
     # Orchestrator API (auth, agent management)
     location /orch/ {{
         proxy_pass http://127.0.0.1:{orch_port}/;
@@ -92,7 +75,7 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
     }}
 
-    # Everything else (agent API, SPA at /app, A2A, WebSocket)
+    # Everything: agent API, SPA at /app, A2A JSON-RPC (POST /), profile, WebSocket
     location / {{
         proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;

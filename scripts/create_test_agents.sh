@@ -88,7 +88,7 @@ conn.close()
 
     # 9. Rebuild agent card
     echo "  Rebuilding agent card..."
-    REBUILD=$(curl -s -X POST "http://localhost:$HOST_PORT/agent-card/rebuild" \
+    REBUILD=$(curl -s -X POST "http://localhost:$HOST_PORT/card/rebuild" \
         -H "Authorization: Bearer $AGENT_TOKEN" 2>/dev/null)
     echo "  Card: $(echo "$REBUILD" | head -c 100)"
 
