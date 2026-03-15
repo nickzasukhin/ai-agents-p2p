@@ -1,4 +1,15 @@
 # Orchestrator service — manages personal cloud agent containers
+# Multi-stage: build SPA frontend, then Python runtime
+
+# Stage 1: Build React SPA
+FROM node:20-alpine AS spa-build
+WORKDIR /app/app
+COPY app/package.json app/package-lock.json* ./
+RUN npm ci --ignore-scripts
+COPY app/ ./
+RUN npm run build
+
+# Stage 2: Python runtime + orchestrator + SPA
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -23,6 +34,9 @@ RUN pip install --no-cache-dir \
 
 COPY orchestrator/ /app/orchestrator/
 COPY orchestrator/run.py /app/run.py
+
+# Copy built SPA into /app/spa (served by orchestrator at /app)
+COPY --from=spa-build /app/app/dist /app/spa
 
 ENV ORCH_HOST=0.0.0.0 \
     ORCH_PORT=8000 \

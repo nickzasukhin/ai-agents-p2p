@@ -1,37 +1,4 @@
 services:
-  agent:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    container_name: a2a-agent
-    image: a2a-agent:latest
-    environment:
-      AGENT_NAME: ${AGENT_NAME:-Agent-DevPunks}
-      PORT: "9000"
-      DATA_DIR: /data
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      API_TOKEN: ${API_TOKEN}
-      PUBLIC_URL: https://agents.devpunks.io
-      REGISTRY_URLS: '["https://registry.devpunks.io"]'
-      A2A_REGISTRY_ENABLED: "true"
-      CHAT_MODE: ${CHAT_MODE:-auto}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      PEERS: ""
-    ports:
-      - "9100:9000"
-      - "10000:10000/udp"
-    volumes:
-      - agent-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-
   orchestrator:
     build:
       context: ../..
@@ -51,7 +18,7 @@ services:
       ORCH_DOMAIN: agents.devpunks.io
       ORCH_BASE_URL: https://agents.devpunks.io
       ORCH_NGINX_CONF_DIR: /etc/nginx/conf.d/agents
-      ORCH_SEED_NODE_URL: https://agents.devpunks.io
+      ORCH_SEED_NODE_URL: ""
       ORCH_RESEND_API_KEY: ${ORCH_RESEND_API_KEY:-}
       ORCH_EMAIL_FROM: ${ORCH_EMAIL_FROM:-noreply@devpunks.io}
       ORCH_ADMIN_EMAILS: ${ORCH_ADMIN_EMAILS:-[]}
@@ -73,9 +40,6 @@ services:
       - /opt/agents/data:/opt/agents/data
       - /etc/nginx/conf.d/agents:/etc/nginx/conf.d/agents
       - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      agent:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -103,6 +67,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  agent-data:
   orchestrator-data:
   registry-data:

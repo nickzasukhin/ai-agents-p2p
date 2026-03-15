@@ -24,9 +24,12 @@ import asyncio
 
 import httpx
 import structlog
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from contextlib import asynccontextmanager
 
@@ -541,5 +544,61 @@ def create_orchestrator_app(
             "users": users,
             "agents": agents,
         }
+
+    # ── SPA Serving (main domain) ──────────────────────────────
+
+    # Root: authenticated → redirect to subdomain, otherwise → /app (auth screen)
+    @app.get("/")
+    async def root(request: Request):
+        """Main domain root: redirect to user subdomain or auth screen."""
+        # Check if user is authenticated
+        token = request.cookies.get("session")
+        if not token:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+
+        if token:
+            payload = sessions.verify_session(token)
+            if payload:
+                user = await _db.get_user_by_id(payload["user_id"])
+                if user and user.get("subdomain"):
+                    subdomain = user["subdomain"]
+                    return RedirectResponse(
+                        url=f"https://{subdomain}.{config.domain}/app",
+                        status_code=302,
+                    )
+
+        return RedirectResponse(url="/app", status_code=302)
+
+    # Serve the SPA at /app and /app/*
+    # SPA location: /app/spa in Docker, or ../app/dist for local dev
+    app_dist = Path("/app/spa")
+    if not app_dist.exists():
+        app_dist = Path(__file__).parent.parent / "app" / "dist"
+
+    @app.get("/app")
+    @app.get("/app/{rest_of_path:path}")
+    async def serve_spa(rest_of_path: str = ""):
+        """Serve the React SPA."""
+        if app_dist.exists():
+            # Try to serve static asset first
+            if rest_of_path:
+                asset = app_dist / rest_of_path
+                if asset.is_file():
+                    return FileResponse(str(asset))
+            # Fallback to index.html for SPA routing
+            index = app_dist / "index.html"
+            if index.exists():
+                return FileResponse(str(index))
+        return HTMLResponse(
+            "<h1>DevPunks Agent Network</h1>"
+            "<p>SPA not found. Please build the frontend first.</p>",
+            status_code=503,
+        )
+
+    # Mount static assets from SPA dist (JS, CSS, images)
+    if app_dist.exists():
+        app.mount("/app/assets", StaticFiles(directory=str(app_dist / "assets")), name="spa-assets")
 
     return app
