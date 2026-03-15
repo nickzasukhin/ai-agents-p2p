@@ -602,7 +602,7 @@ def create_app(
             return JSONResponse({"error": "Negotiation or discovery not configured"}, 400)
 
         body = await request.json()
-        agent_url = body.get("agent_url", "").rstrip("/")
+        agent_url = (body.get("agent_url") or body.get("peer_url") or "").rstrip("/")
         if not agent_url:
             return JSONResponse({"error": "agent_url required"}, 400)
 

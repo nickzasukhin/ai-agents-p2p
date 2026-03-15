@@ -49,9 +49,13 @@ export function HomeScreen({ onViewAgent }: HomeScreenProps) {
 
   async function handleNegotiate(peerUrl: string) {
     try {
-      await agentApi.startNegotiation(peerUrl)
+      console.log('[negotiate] starting with peer:', peerUrl)
+      const result = await agentApi.startNegotiation(peerUrl)
+      console.log('[negotiate] result:', result)
       loadData()
-    } catch {}
+    } catch (err) {
+      console.error('[negotiate] error:', err)
+    }
   }
 
   if (loading) {
