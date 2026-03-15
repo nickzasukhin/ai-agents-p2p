@@ -119,15 +119,29 @@ class DiscoveryLoop:
             self.state.discovered_agents[agent.url] = agent
 
         # Step 4: Filter self-matches and deduplicate
-        if discovered and self.our_url:
-            own = self.our_url.rstrip("/")
-            seen: set[str] = set()
+        if discovered:
+            own = self.our_url.rstrip("/") if self.our_url else ""
+            seen_urls: set[str] = set()
+            seen_canonical: set[str] = set()
             filtered: list[DiscoveredAgent] = []
             for a in discovered:
                 u = a.url.rstrip("/")
-                if u == own or u in seen:
+                # Filter self
+                if own and u == own:
                     continue
-                seen.add(u)
+                # Dedup by URL
+                if u in seen_urls:
+                    continue
+                # Dedup by canonical URL (provider.url in agent card) to avoid
+                # multiple subdomains pointing to the same agent
+                canonical = ""
+                if a.card and a.card.provider and a.card.provider.url:
+                    canonical = a.card.provider.url.rstrip("/")
+                if canonical and canonical in seen_canonical:
+                    continue
+                seen_urls.add(u)
+                if canonical:
+                    seen_canonical.add(canonical)
                 filtered.append(a)
             if len(filtered) < len(discovered):
                 log.info("discovery_filtered", original=len(discovered), filtered=len(filtered))
