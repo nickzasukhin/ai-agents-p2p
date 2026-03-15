@@ -70,7 +70,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '100vh',
+        minHeight: '100%',
         padding: spacing.lg,
         background: colors.bgPrimary,
       }}

@@ -73,7 +73,7 @@ export function ContainerSetupScreen({ phase, error, onRetry }: ContainerSetupSc
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      height: '100vh', background: colors.bgPrimary, padding: spacing.xl,
+      height: '100%', background: colors.bgPrimary, padding: spacing.xl,
     }}>
       {/* Logo */}
       <div style={{ marginBottom: spacing.xxl, opacity: 0.8 }}>

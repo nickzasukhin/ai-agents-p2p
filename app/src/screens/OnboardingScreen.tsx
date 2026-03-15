@@ -263,7 +263,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: '100vh',
+      display: 'flex', flexDirection: 'column', height: '100%',
       background: colors.bgPrimary, maxWidth: 600, margin: '0 auto',
     }}>
       {/* Header */}
